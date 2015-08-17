@@ -1,20 +1,22 @@
 program MutualInfoIntegralTransport
   use Utility,       only : linspace
-  use ColProbSlab,   only : slab_type
+  use ColProbSlab,   only : slab_type, test2d
   use Eigen,         only : eigen_type
   implicit none
 
   real(8), parameter :: SlabWidth = 20.d0
-  integer, parameter :: Nmax      = 1000 !5120 !20480 !5120
+  integer, parameter :: Nmax      = 1600 !5120 !20480 !5120
   integer, parameter :: nIter     = 1
   real(8), parameter :: CorrelTol = 1.d-6
 
+  integer, parameter :: ProbDim = 2
+
   logical, parameter :: coarsen = .false.
   logical, parameter :: reflect = .false.
-  logical, parameter :: split   = .true.
+  logical, parameter :: split   = .false.
 
   ! SigmaT = 1.d0
-  real(8), parameter :: base_pScatter = 0.50d0
+  real(8), parameter :: base_pScatter = 0.9d0
   real(8), parameter :: base_SigmaF   = 1.d0 * ( 1.d0 - base_pScatter )
   real(8), parameter :: base_nubar    = 1.d0
 
@@ -41,44 +43,52 @@ program MutualInfoIntegralTransport
   integer :: nMesh
   integer :: i, j, m, N
 
-  ! >>>>> initialization
-  N = Nmax
-  x = linspace(0.d0,SlabWidth,N+1)
-  dx = SlabWidth / N
+  if ( ProbDim == 1 ) then
+    ! >>>>> initialization
+    N = Nmax
+    x = linspace(0.d0,SlabWidth,N+1)
+    dx = SlabWidth / N
 
-  slab % n     = Nmax
-  slab % width = SlabWidth
-  slab % x     = linspace(0.d0,SlabWidth,N+1)
-  slab % dx    = slab%width / slab%n
+    slab % n     = Nmax
+    slab % width = SlabWidth
+    slab % x     = linspace(0.d0,SlabWidth,N+1)
+    slab % dx    = slab%width / slab%n
 
-  ! split slab, set zone between xleft and xright to be pure capture
-  if ( split ) then
-    do i=1,N
-      if ( slab%x(i) >= xleft .and. slab%x(i+1) <= xright ) then
-        pScatter(i) = 0.d0
-        nuSigmaF(i) = 0.d0
-      endif
+    ! split slab, set zone between xleft and xright to be pure capture
+    if ( split ) then
+      do i=1,N
+        if ( slab%x(i) >= xleft .and. slab%x(i+1) <= xright ) then
+          pScatter(i) = 0.d0
+          nuSigmaF(i) = 0.d0
+        endif
+      enddo
+    endif
+
+    if ( allocated( F ) )  deallocate( F )
+    if ( allocated( G ) )  deallocate( G )
+    if ( allocated( B ) )  deallocate( B )
+    if ( allocated( p ) )  deallocate( p )
+    if ( allocated( q ) )  deallocate( q )
+    allocate( F(1:N,1:N), G(1:N,1:N), B(1:N,1:N), p(1:N), q(1:N) )
+
+    ! >>>>> calculate fission matrix
+    ! first calculate first collision probability matrix and then get fission matrix
+    ! loop over source elements
+    F = 0.d0
+    do j=1,N
+      ! loop over destination elements
+      do i=j,N
+        F(i,j) = slab%collision_probability(i,j)
+        F(j,i) = F(i,j)
+      enddo
     enddo
+  elseif ( ProbDim == 2 ) then
+    N = Nmax
+    call test2d( F )
+  else
+    write(*,*) 'code supports slabs in 1d or 2d only.' ; stop
   endif
 
-  if ( allocated( F ) )  deallocate( F )
-  if ( allocated( G ) )  deallocate( G )
-  if ( allocated( B ) )  deallocate( B )
-  if ( allocated( p ) )  deallocate( p )
-  if ( allocated( q ) )  deallocate( q )
-  allocate( F(1:N,1:N), G(1:N,1:N), B(1:N,1:N), p(1:N), q(1:N) )
-
-  ! >>>>> calculate fission matrix
-  ! first calculate first collision probability matrix and then get fission matrix
-  ! loop over source elements
-  F = 0.d0
-  do j=1,N
-    ! loop over destination elements
-    do i=j,N
-      F(i,j) = slab%collision_probability(i,j)
-      F(j,i) = F(i,j)
-    enddo
-  enddo
   ! apply scattering to first collision probability matrix
   if ( any(pScatter > 0.d0) ) then
     call scattering( F )
@@ -87,6 +97,7 @@ program MutualInfoIntegralTransport
   ! multiply by nu-sigmaf diagonal matrix to convert to fission matrix
   do i=1,n
     F(i,:) = nuSigmaF(i) * F(i,:)
+    write(*,'(es12.4)')  F(i,1)
   enddo
 
   ! >>>>> reflect slab if desired
