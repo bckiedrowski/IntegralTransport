@@ -1,5 +1,5 @@
 program MutualInfoIntegralTransport
-  use Utility,       only : vec, matrix, copy 
+  use Utility,       only : vector, matrix, copy 
   use Input,         only : nIter
   use ColProbGeom,   only : geom_type, initialize_geom
   use Eigen,         only : eigen_type
@@ -34,8 +34,8 @@ program MutualInfoIntegralTransport
   write(*,'(" mutual info     = ")') 
 
   ! >>>>> mutual information calculation
-  MutualInfo = vec( nIter )
-  Correl     = vec( nIter )
+  MutualInfo = vector( nIter )
+  Correl     = vector( nIter )
   G = copy( F )
   allocate( geom_copy, source = geom )
 
@@ -50,7 +50,7 @@ program MutualInfoIntegralTransport
     do   ! until done coarsening
       nMesh = geom%mesh_size()
 
-      p = vec( nMesh ) ; q = vec( nMesh ) 
+      p = vector( nMesh ) ; q = vector( nMesh ) 
       do i=1,nMesh
         p(i) = sum( B(i,:) )
         q(i) = sum( B(:,i) )

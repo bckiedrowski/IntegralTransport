@@ -18,6 +18,7 @@ module Eigen
 CONTAINS
 
 subroutine PowerIteration( E, A )
+  use Utility, only : vector
   implicit none
 
   class(eigen_type), intent(inout) :: E
@@ -29,9 +30,8 @@ subroutine PowerIteration( E, A )
   integer :: i, N
 
   N = size( A, dim=1 )
-  if ( allocated(v)  )  deallocate(v)
-  if ( allocated(Av) )  deallocate(Av)
-  allocate( v(1:N), Av(1:N) )
+  v  = vector(N) 
+  AV = vector(N)
   Av = 1.d0
 
   err = 1.d0 ; E%val(1) = 1.d0
@@ -74,7 +74,6 @@ recursive subroutine DeflationPowerIteration( E, A, k, neig )
     stop
   endif
 
-  !call InitEigen( E, A, k )
   call E%init( A, k )
   N = size( A, dim=1 )
 

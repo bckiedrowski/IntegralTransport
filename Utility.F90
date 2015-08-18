@@ -4,7 +4,7 @@ module Utility
   interface copy
     module procedure copy_vector, copy_matrix
   end interface
-  interface vec
+  interface vector
     module procedure new_vector, uniform_vector
   end interface
   interface matrix

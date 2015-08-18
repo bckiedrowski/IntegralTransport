@@ -94,7 +94,7 @@ CONTAINS
 !------------------------------------------------------------------------------
 subroutine initialize_geom( geom )
   use Input
-  use Utility, only : vec, linspace
+  use Utility, only : vector, linspace
   implicit none
 
   class(geom_type), allocatable, intent(inout) :: geom
@@ -147,11 +147,11 @@ subroutine initialize_geom( geom )
     geom%w = linspace( pi/(geom%nw+1), pi, geom%nw + 1 )
   end select
 
-  geom%SigmaT   = vec( base_SigmaT, geom%mesh_size() )
-  geom%pScatter = vec( base_pScatter, geom%mesh_size() )
-  geom%SigmaF   = vec( base_SigmaF, geom%mesh_size() )
-  geom%nubar    = vec( base_nubar, geom%mesh_size() )
-  geom%nuSigmaF = vec( base_nubar*base_SigmaF, geom%mesh_size() )
+  geom%SigmaT   = vector( base_SigmaT, geom%mesh_size() )
+  geom%pScatter = vector( base_pScatter, geom%mesh_size() )
+  geom%SigmaF   = vector( base_SigmaF, geom%mesh_size() )
+  geom%nubar    = vector( base_nubar, geom%mesh_size() )
+  geom%nuSigmaF = vector( base_nubar*base_SigmaF, geom%mesh_size() )
 
 end subroutine initialize_geom
 
@@ -235,6 +235,7 @@ end function mesh_size_block
 
 !------------------------------------------------------------------------------
 subroutine fission_matrix( geom, G )
+  use Utility,       only : matrix
   use MatrixInverse, only : matinv
   implicit none
 
@@ -252,10 +253,9 @@ subroutine fission_matrix( geom, G )
   ! >>>>> compute scattering matrix if needed
   n = size( G, dim=1 )
   if ( any( geom%pScatter > 0.d0 ) ) then
-    if ( allocated( ICG ) )     deallocate( ICG )
-    if ( allocated( ICGinv ) )  deallocate( ICGinv )
-
-    allocate( ICG(1:n,1:n), ICGinv(1:n,1:n) )
+    !allocate( ICG(1:n,1:n), ICGinv(1:n,1:n) )
+    ICG    = matrix( n, n )
+    ICGinv = matrix( n, n )
     do i=1,n
       ICG(i,:) = -geom%pScatter(i) * G(i,:)
       ICG(i,i) = 1.d0 + ICG(i,i)
@@ -359,6 +359,7 @@ end subroutine coarsen_block
 
 !------------------------------------------------------------------------------
 subroutine collision_probability_slab( geom, G )
+  use Utility,     only : matrix
   use ExpIntegral, only : En => ExpIntN
   implicit none
 
@@ -369,8 +370,7 @@ subroutine collision_probability_slab( geom, G )
   integer :: i, j, n
 
   n = geom%n ; dx = geom%dx
-  if ( allocated( G ) )  deallocate( G )
-  allocate( G(1:n,1:n) )
+  G = matrix( n, n )
 
   G = 0.d0
   do j=1,n
@@ -389,7 +389,7 @@ end subroutine collision_probability_slab
 
 !------------------------------------------------------------------------------
 subroutine collision_probability_block( geom, G )
-  use Utility, only : linspace
+  use Utility, only : matrix, linspace
   implicit none
 
   class(block_type),    intent(in)    :: geom
@@ -406,8 +406,7 @@ subroutine collision_probability_block( geom, G )
   dw = geom%w(2) - geom%w(1)
 
   M = geom%nx * geom%ny
-  if ( allocated( G ) )  deallocate( G )
-  allocate( G(1:M,1:M) ) ; G = 0.d0
+  G = matrix( M, M ) ; G = 0.d0
 
   n = 0
   do i=1,geom%nw
@@ -419,7 +418,6 @@ subroutine collision_probability_block( geom, G )
     do j=1,rvec%n
       call rvec%ray(j)%integrate_ray( geom, G )
     enddo
-    !write(*,*) geom%w(i) / pi * 180.d0, rvec%n
   enddo
 
   ! finalize collision probability matrix (normalize and compute diagnonal)
@@ -456,7 +454,6 @@ subroutine create_rays( rvec, geom, n )
   ! compute number of rays and allocate structure
   rvec%n = 0
   u = 0.0d0 ; v = 0.0d0
-  !u = 0.5d0*du ; v = 0.5d0*dv
   do while( u < geom%xmax ) 
     rvec%n = rvec%n + 1 
     u = u + du
@@ -470,7 +467,6 @@ subroutine create_rays( rvec, geom, n )
   allocate( rvec%ray(1:rvec%n) )
 
   u = 0.0d0 ; k = 1
-  !u = 0.5d0*du; k = 1
   do while ( u < geom%xmax )
     rvec%ray(k)%x0 = u
     rvec%ray(k)%y0 = 0.d0
@@ -478,7 +474,6 @@ subroutine create_rays( rvec, geom, n )
   enddo
 
   v = 0.0d0
-  !v = 0.5d0*dv
   do while ( v < geom%ymax )
     rvec%ray(k)%x0 = merge( 0.d0, geom%xmax, geom%w(n) < half_pi )
     rvec%ray(k)%y0 = v
