@@ -41,6 +41,24 @@ function linspace( a, b, N )  result(x)
 end function linspace
 
 !-------------------------------------------------------------------------------
+function copy_matrix( A )  result(B)
+  implicit none
+
+  real(8), intent(in) :: A(:,:)
+
+  real(8), allocatable :: B(:,:)
+
+  integer :: n, m
+
+  n = size( A, dim=1 )
+  m = size( A, dim=2 )
+  if ( allocated( B ) )  deallocate( B )
+  allocate( B(1:n,1:m) )
+  B(:,:) = A(:,:)
+
+end function copy_matrix
+
+!-------------------------------------------------------------------------------
 function outer_product( u, v )  result(A)
   implicit none
 

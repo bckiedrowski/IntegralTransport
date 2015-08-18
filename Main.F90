@@ -1,5 +1,5 @@
 program MutualInfoIntegralTransport
-  use Utility,       only : linspace, vec
+  use Utility,       only : linspace, vec, copy_matrix
   use ColProbSlab,   only : geom_type, slab_type, block_type
   use Eigen,         only : eigen_type
   implicit none
@@ -15,9 +15,9 @@ program MutualInfoIntegralTransport
   logical, parameter :: reflect = .false.
   logical, parameter :: split   = .false.
 
-  ! SigmaT = 1.d0
+  real(8), parameter :: base_SigmaT   = 1.0d0
   real(8), parameter :: base_pScatter = 0.9d0
-  real(8), parameter :: base_SigmaF   = 1.d0 * ( 1.d0 - base_pScatter )
+  real(8), parameter :: base_SigmaF   = base_SigmaT * ( 1.d0 - base_pScatter )
   real(8), parameter :: base_nubar    = 1.d0
 
   real(8), parameter :: xleft = 9.d0, xright = 11.1d0
@@ -63,6 +63,7 @@ program MutualInfoIntegralTransport
     geom%x     = linspace(0.d0,SlabWidth,N+1)
     geom%dx    = geom%width / geom%n
 
+    geom%SigmaT   = vec( base_SigmaT, N )
     geom%pScatter = vec( base_pScatter, N )
     geom%SigmaF   = vec( base_SigmaF, N )
     geom%nubar    = vec( base_nubar, N )
@@ -78,12 +79,12 @@ program MutualInfoIntegralTransport
       enddo
     endif
   type is ( block_type )
-    geom%nx   = 40
-    geom%ny   = 40
+    geom%nx   = 20
+    geom%ny   = 20
     geom%xmax = 5.d0
     geom%ymax = 5.d0
-    geom%nw   = 1028 !256
-    geom%dh   = 0.001d0
+    geom%nw   = 256
+    geom%dh   = 0.01d0
 
     geom%x = linspace( 0.d0, geom%xmax, geom%nx+1 )
     geom%y = linspace( 0.d0, geom%ymax, geom%ny+1 )
@@ -91,6 +92,7 @@ program MutualInfoIntegralTransport
  
     N = geom%nx * geom%ny
 
+    geom%SigmaT   = vec( base_SigmaT, N )
     geom%pScatter = vec( base_pScatter, N )
     geom%SigmaF   = vec( base_SigmaF, N )
     geom%nubar    = vec( base_nubar, N )
@@ -131,7 +133,7 @@ program MutualInfoIntegralTransport
   if ( allocated( MutualInfo ) )  deallocate( MutualInfo )
   if ( allocated( Correl ) )      deallocate( Correl )
   allocate( MutualInfo(1:nIter), Correl(1:nIter) )
-  G = F
+  G = copy_matrix( F )
   
   if ( allocated( r ) )  deallocate( r )
   allocate( r(1:N) )

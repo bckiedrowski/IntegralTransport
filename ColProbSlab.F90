@@ -6,6 +6,7 @@ module ColProbSlab
   private :: collision_probability_slab, collision_probability_block
 
   type, abstract :: geom_type
+    real(8), allocatable :: SigmaT(:)
     real(8), allocatable :: pScatter(:)
     real(8), allocatable :: SigmaF(:)
     real(8), allocatable :: nubar(:)
@@ -78,7 +79,7 @@ subroutine fission_matrix( geom, G )
   ! >>>>> then compute fission matrix
   ! multiply by nu-sigmaf diagonal matrix to convert to fission matrix
   do i=1,n
-    G(i,:) = geom%nuSigmaF(i) * G(i,:)
+    G(i,:) = geom%nuSigmaF(i)/geom%SigmaT(i) * G(i,:)
   enddo
 
 end subroutine fission_matrix
@@ -103,7 +104,7 @@ subroutine collision_probability_slab( geom, G )
   class(slab_type),     intent(in)    :: geom
   real(8), allocatable, intent(inout) :: G(:,:)
 
-  real(8) :: t, p, dx
+  real(8) :: r, s, t, p, dx
   integer :: i, j, n
 
   n = geom%n ; dx = geom%dx
@@ -112,11 +113,14 @@ subroutine collision_probability_slab( geom, G )
 
   G = 0.d0
   do j=1,n
-    G(j,j) = 1.d0 - ( 1.d0 - 2.d0*En(3,dx) )/(2.d0*dx)
+    s = geom%SigmaT(j) * dx
+    G(j,j) = 1.d0 - ( 1.d0 - 2.d0*En(3,s) )/(2.d0*s)
+    t = 0.d0
     do i=j+1,n
-      t = (abs(j-i)-1)*dx
-      p = 0.5d0/dx*( En(3,t) - 2.d0*En(3,t+dx) + En(3,t+2.d0*dx) )
-      G(i,j) = p ; G(j,i) = p
+      r = geom%SigmaT(i) * dx
+      p = 0.5d0/dx*( En(3,t) - En(3,t+r) - En(3,t+s) + En(3,t+r+s) )
+      G(i,j) = p / geom%SigmaT(j) ; G(j,i) = p / geom%SigmaT(i)
+      t = t + r
     enddo
   enddo
 
@@ -225,19 +229,19 @@ subroutine create_rays( rvec, geom, n )
 end subroutine create_rays
 
 
-subroutine integrate_ray( ray, geom, A )
+subroutine integrate_ray( ray, geom, G )
   use Bickley, only : Kin
   implicit none
 
   class(ray_type),  intent(in)    :: ray
   type(block_type), intent(in)    :: geom
-  real(8),          intent(inout) :: A(:,:)
+  real(8),          intent(inout) :: G(:,:)
 
-  type :: grid_list_type
+  type :: elem_list_type
     integer :: k
     real(8) :: s
   end type
-  type(grid_list_type) :: g(1:geom%nx*geom%ny)
+  type(elem_list_type) :: e(1:geom%nx*geom%ny)
 
   real(8) :: x, y, x0, y0, xe, ye, dx, dy, wx, wy, r, s, t, p
 
@@ -265,8 +269,8 @@ subroutine integrate_ray( ray, geom, A )
     s = min( merge( dx, 1.d10, dx > 0.d0), dy )
 
     n = n + 1
-    g(n)%k = i + (j-1)*geom%nx
-    g(n)%s = s
+    e(n)%k = i + (j-1)*geom%nx
+    e(n)%s = s
 
     x = x + wx*s
     y = y + wy*s
@@ -280,17 +284,17 @@ subroutine integrate_ray( ray, geom, A )
   ! loop over intersecting elements and compute collision probabilities for this ray
   do l=1,n
     ! "within element" collision probability
-    j = g(l)%k
-    s = g(l)%s
+    j = e(l)%k
+    s = e(l)%s * geom%SigmaT(j)
     t = 0.d0
-    A(j,j) = A(j,j) + ( 0.25d0*pi - Kin(3,s) ) 
+    G(j,j) = G(j,j) + ( 0.25d0*pi - Kin(3,s) ) / geom%SigmaT(j)
     do m=l+1,n
       ! collision probabilities for all other elements (use reciprocity/optic symmetry)
-      i = g(m)%k
-      r = g(m)%s
-      p = Kin(3,t) - Kin(3,t+s) - Kin(3,t+r) + Kin(3,t+r+s)
-      A(i,j) = A(i,j) + p
-      A(j,i) = A(j,i) + p
+      i = e(m)%k
+      r = e(m)%s * geom%SigmaT(i)
+      p = Kin(3,t) - Kin(3,t+s) - Kin(3,t+r) + Kin(3,t+r+s) 
+      G(i,j) = G(i,j) + p / geom%SigmaT(j)
+      G(j,i) = G(j,i) + p / geom%SigmaT(i)
       t = t + r
     enddo
   enddo
