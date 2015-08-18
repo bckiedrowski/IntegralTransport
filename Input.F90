@@ -2,9 +2,7 @@ module Input
   implicit none
 
   integer, parameter :: ProbDim = 2
-
   integer, parameter :: nIter   = 1
-  logical, parameter :: reflect = .false.
 
   ! >>>>> common data
   real(8), parameter :: base_SigmaT   = 1.0d0

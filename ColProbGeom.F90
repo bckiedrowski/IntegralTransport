@@ -1,11 +1,12 @@
 module ColProbGeom
   implicit none
 
+  private
+  public  :: initialize_geom
+
   real(8), parameter :: pi = acos(-1.d0)
 
-  private :: collision_probability_slab, collision_probability_block
-
-  type, abstract :: geom_type
+  type, public, abstract :: geom_type
     real(8), allocatable :: SigmaT(:)
     real(8), allocatable :: pScatter(:)
     real(8), allocatable :: SigmaF(:)
@@ -119,10 +120,11 @@ subroutine initialize_geom( geom )
   type is ( slab_type ) 
     geom%n       = NMesh_1D
     geom%width   = SlabWidth_1D
-    geom%x       = linspace( 0.d0, geom%width, geom%n+1 )
     geom%dx      = geom%width / geom%n
     geom%fold    = merge( Reflect_1D, 0, Reflect_1D == 1 )
     geom%coarsen = coarsen_1D
+
+    call linspace( geom%x, 0.d0, geom%width, geom%n+1 )
 
     ! split slab, set zone between xleft and xright to be pure capture
     if ( split_1D ) then
@@ -142,16 +144,16 @@ subroutine initialize_geom( geom )
     geom%dh   = RaySpacing_2D
     geom%fold = merge( Reflect_2D, 0, Reflect_2D == 1 .or. Reflect_2D == 2 )
 
-    geom%x = linspace( 0.d0, geom%xmax, geom%nx+1 )
-    geom%y = linspace( 0.d0, geom%ymax, geom%ny+1 )
-    geom%w = linspace( pi/(geom%nw+1), pi, geom%nw + 1 )
+    call linspace( geom%x, 0.d0, geom%xmax, geom%nx+1 )
+    call linspace( geom%y, 0.d0, geom%ymax, geom%ny+1 )
+    call linspace( geom%w, pi/(geom%nw+1), pi, geom%nw + 1 )
   end select
 
-  geom%SigmaT   = vector( base_SigmaT, geom%mesh_size() )
-  geom%pScatter = vector( base_pScatter, geom%mesh_size() )
-  geom%SigmaF   = vector( base_SigmaF, geom%mesh_size() )
-  geom%nubar    = vector( base_nubar, geom%mesh_size() )
-  geom%nuSigmaF = vector( base_nubar*base_SigmaF, geom%mesh_size() )
+  call vector( geom%SigmaT, base_SigmaT, geom%mesh_size() )
+  call vector( geom%pScatter, base_pScatter, geom%mesh_size() )
+  call vector( geom%SigmaF, base_SigmaF, geom%mesh_size() )
+  call vector( geom%nubar, base_nubar, geom%mesh_size() )
+  call vector( geom%nuSigmaF, base_nubar*base_SigmaF, geom%mesh_size() )
 
 end subroutine initialize_geom
 
@@ -171,12 +173,12 @@ subroutine assign_slab( gnew, geom )
     gnew%fold    = geom%fold   
     gnew%coarsen = geom%coarsen
 
-    gnew%x        = copy(geom%x)      
-    gnew%SigmaT   = copy(geom%SigmaT) 
-    gnew%pScatter = copy(geom%pScatter) 
-    gnew%SigmaF   = copy(geom%SigmaF) 
-    gnew%nubar    = copy(geom%nubar) 
-    gnew%nuSigmaF = copy(geom%nuSigmaF) 
+    call copy(gnew%x,        geom%x)      
+    call copy(gnew%SigmaT,   geom%SigmaT) 
+    call copy(gnew%pScatter, geom%pScatter) 
+    call copy(gnew%SigmaF,   geom%SigmaF) 
+    call copy(gnew%nubar,    geom%nubar) 
+    call copy(gnew%nuSigmaF, geom%nuSigmaF) 
   end select
 
 end subroutine assign_slab
@@ -199,16 +201,16 @@ subroutine assign_block( gnew, geom )
     gnew%dh   = geom%dh   
     gnew%fold = geom%fold 
 
-    geom%x = copy(geom%x) 
-    geom%y = copy(geom%y) 
-    geom%w = copy(geom%w) 
+    call copy( gnew%x,  geom%x) 
+    call copy( gnew%y,  geom%y) 
+    call copy( gnew%w,  geom%w) 
 
-    gnew%x        = copy(geom%x)      
-    gnew%SigmaT   = copy(geom%SigmaT) 
-    gnew%pScatter = copy(geom%pScatter) 
-    gnew%SigmaF   = copy(geom%SigmaF) 
-    gnew%nubar    = copy(geom%nubar) 
-    gnew%nuSigmaF = copy(geom%nuSigmaF) 
+    call copy( gnew%x,        geom%x)      
+    call copy( gnew%SigmaT,   geom%SigmaT) 
+    call copy( gnew%pScatter, geom%pScatter) 
+    call copy( gnew%SigmaF,   geom%SigmaF) 
+    call copy( gnew%nubar,    geom%nubar) 
+    call copy( gnew%nuSigmaF, geom%nuSigmaF) 
   end select
 
 end subroutine assign_block
@@ -253,9 +255,8 @@ subroutine fission_matrix( geom, G )
   ! >>>>> compute scattering matrix if needed
   n = size( G, dim=1 )
   if ( any( geom%pScatter > 0.d0 ) ) then
-    !allocate( ICG(1:n,1:n), ICGinv(1:n,1:n) )
-    ICG    = matrix( n, n )
-    ICGinv = matrix( n, n )
+    call matrix( ICG, n, n )
+    call matrix( ICGinv, n, n )
     do i=1,n
       ICG(i,:) = -geom%pScatter(i) * G(i,:)
       ICG(i,i) = 1.d0 + ICG(i,i)
@@ -290,10 +291,10 @@ subroutine reflect_slab( geom, G )
     write(*,'(" reflected at midplane ")') 
     N = geom%mesh_size() / 2
     geom%n = N
-    geom%x = linspace( 0.d0, 0.5d0*geom%width, N+1 )
-    F = copy( G )
+    call linspace( geom%x, 0.d0, 0.5d0*geom%width, N+1 )
+    call copy( F, G )
 
-    G = matrix( N, N )
+    call matrix( G, N, N )
     G(1:N,1:N) = F(1:N,1:N) + F(2*N:N+1:-1,1:N)
     deallocate( F )
   endif
@@ -325,18 +326,18 @@ subroutine coarsen_slab( geom, G, success )
   n = geom%mesh_size()
   if ( geom%coarsen .and. mod(n,2) == 0 ) then
     ! coarsen by a factor of two
-    tmp = matrix( n/2, n/2 )
+    call matrix( tmp, n/2, n/2 )
     tmp = 0.d0
     do j=1,n,2
       do i=1,n,2
         tmp(1+i/2,1+j/2) = sum( G(i:i+1,j:j+1) )
       enddo
     enddo  
-    G = copy( tmp )
+    call copy( G, tmp )
     deallocate( tmp )
 
     geom%n  = n/2
-    geom%x  = linspace( 0.d0, geom%width, geom%n+1 )
+    call linspace( geom%x, 0.d0, geom%width, geom%n+1 )
     success = .true.  
   else
     success = .false.
@@ -370,9 +371,9 @@ subroutine collision_probability_slab( geom, G )
   integer :: i, j, n
 
   n = geom%n ; dx = geom%dx
-  G = matrix( n, n )
-
+  call matrix( G, n, n )
   G = 0.d0
+
   do j=1,n
     s = geom%SigmaT(j) * dx
     G(j,j) = 1.d0 - ( 1.d0 - 2.d0*En(3,s) )/(2.d0*s)
@@ -389,7 +390,7 @@ end subroutine collision_probability_slab
 
 !------------------------------------------------------------------------------
 subroutine collision_probability_block( geom, G )
-  use Utility, only : matrix, linspace
+  use Utility, only : matrix
   implicit none
 
   class(block_type),    intent(in)    :: geom
@@ -406,7 +407,7 @@ subroutine collision_probability_block( geom, G )
   dw = geom%w(2) - geom%w(1)
 
   M = geom%nx * geom%ny
-  G = matrix( M, M ) ; G = 0.d0
+  call matrix( G, M, M ) ; G = 0.d0
 
   n = 0
   do i=1,geom%nw

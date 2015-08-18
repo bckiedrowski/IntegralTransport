@@ -30,8 +30,8 @@ subroutine PowerIteration( E, A )
   integer :: i, N
 
   N = size( A, dim=1 )
-  v  = vector(N) 
-  AV = vector(N)
+  call vector(v,N) 
+  call vector(Av,N)
   Av = 1.d0
 
   err = 1.d0 ; E%val(1) = 1.d0

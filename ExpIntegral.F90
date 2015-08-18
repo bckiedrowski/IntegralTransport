@@ -1,6 +1,9 @@
 module ExpIntegral
   implicit none
 
+  private
+  public  :: ExpIntN
+
 CONTAINS
 
 real(8) function ExpIntN ( n, x )  result(en)

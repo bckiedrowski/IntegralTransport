@@ -1,6 +1,8 @@
 module Utility
   implicit none
 
+  public
+
   interface copy
     module procedure copy_vector, copy_matrix
   end interface
@@ -14,32 +16,32 @@ module Utility
 CONTAINS
 
 !-------------------------------------------------------------------------------
-function new_vector( N )  result(x)
+subroutine new_vector( x, N )  
   implicit none
 
+  real(8), allocatable, intent(out) :: x(:)
   integer, intent(in)  :: N
-  real(8), allocatable :: x(:)
 
   if ( allocated(x) )  deallocate( x )
   allocate( x(1:max(1,N)) )
 
-end function new_vector
+end subroutine new_vector
 
 !-------------------------------------------------------------------------------
-function uniform_vector( a, N )  result(x)
+subroutine uniform_vector( x, a, N )
   implicit none
 
+  real(8), allocatable, intent(out) :: x(:)
   real(8), intent(in)  :: a
   integer, intent(in)  :: N
-  real(8), allocatable :: x(:)
 
-  x = new_vector( N )
+  call new_vector( x, N )
   x(1:N) = a
 
-end function uniform_vector
+end subroutine uniform_vector
 
 !-------------------------------------------------------------------------------
-function new_matrix( n, m )  result(A)
+subroutine new_matrix( A, n, m )  
   implicit none
 
   integer, intent(in)  :: n, m
@@ -48,15 +50,15 @@ function new_matrix( n, m )  result(A)
   if ( allocated(A) )  deallocate( A )
   allocate( A(1:max(1,n), 1:max(1,m)) )
 
-end function new_matrix
+end subroutine new_matrix
 
 !-------------------------------------------------------------------------------
-function linspace( a, b, N )  result(x)
+subroutine linspace( x, a, b, N )
   implicit none
 
+  real(8), allocatable, intent(out) :: x(:)
   real(8), intent(in)  :: a, b
   integer, intent(in)  :: N
-  real(8), allocatable :: x(:)
 
   integer :: i
 
@@ -71,15 +73,15 @@ function linspace( a, b, N )  result(x)
     x(1) = 0.5d0 * ( b - a )
   endif
 
-end function linspace
+end subroutine linspace
 
 !-------------------------------------------------------------------------------
-function copy_vector( u )  result(v)
+subroutine copy_vector( v, u ) 
   implicit none
 
-  real(8), intent(in) :: u(:)
+  real(8), allocatable, intent(out) :: v(:)
+  real(8), intent(in)               :: u(:)
 
-  real(8), allocatable :: v(:)
 
   integer :: n
 
@@ -88,15 +90,14 @@ function copy_vector( u )  result(v)
   allocate( v(1:n) )
   v(:) = u(:)
 
-end function copy_vector
+end subroutine copy_vector
 
 !-------------------------------------------------------------------------------
-function copy_matrix( A )  result(B)
+subroutine copy_matrix( B, A ) 
   implicit none
 
-  real(8), intent(in) :: A(:,:)
-
-  real(8), allocatable :: B(:,:)
+  real(8), allocatable, intent(out) :: B(:,:)
+  real(8), intent(in)               :: A(:,:)
 
   integer :: n, m
 
@@ -106,10 +107,10 @@ function copy_matrix( A )  result(B)
   allocate( B(1:n,1:m) )
   B(:,:) = A(:,:)
 
-end function copy_matrix
+end subroutine copy_matrix
 
 !-------------------------------------------------------------------------------
-function outer_product( u, v )  result(A)
+function outer_product( u, v )   result(A)
   implicit none
 
   real(8), intent(in)  :: u(:), v(:)

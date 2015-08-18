@@ -26,7 +26,7 @@ program MutualInfoIntegralTransport
   
   ! scale fission matrix by 1/k and find pmf vector
   F = F / Eig%val(1)
-  r = copy( Eig%vec(1)%v ) / sum( Eig%vec(1)%v )
+  call copy( r, Eig%vec(1)%v / sum( Eig%vec(1)%v ) )
 
   write(*,'(" mesh            = ", i12)')   geom%mesh_size()
   write(*,'(" keff            = ", f12.5)') Eig%val(1)
@@ -34,15 +34,15 @@ program MutualInfoIntegralTransport
   write(*,'(" mutual info     = ")') 
 
   ! >>>>> mutual information calculation
-  MutualInfo = vector( nIter )
-  Correl     = vector( nIter )
-  G = copy( F )
+  call vector( MutualInfo, nIter )
+  call vector( Correl, nIter )
+  call copy( G, F )
   allocate( geom_copy, source = geom )
 
   do m=1,nIter
     
     nMesh = geom%mesh_size()
-    B = matrix( nMesh, nMesh )
+    call matrix( B, nMesh, nMesh )
     do i=1,nMesh
       B(i,:) = F(i,:) * r(:)
     enddo  
@@ -50,7 +50,8 @@ program MutualInfoIntegralTransport
     do   ! until done coarsening
       nMesh = geom%mesh_size()
 
-      p = vector( nMesh ) ; q = vector( nMesh ) 
+      call vector( p, nMesh ) 
+      call vector( q, nMesh ) 
       do i=1,nMesh
         p(i) = sum( B(i,:) )
         q(i) = sum( B(:,i) )
