@@ -18,7 +18,6 @@ module Eigen
 CONTAINS
 
 subroutine PowerIteration( E, A )
-  use Utility, only : norm
   implicit none
 
   class(eigen_type), intent(inout) :: E
@@ -51,7 +50,7 @@ end subroutine PowerIteration
 
 !-------------------------------------------------------------------------------
 recursive subroutine DeflationPowerIteration( E, A, k, neig )
-  use Utility, only : outer_product, norm
+  use Utility, only : outer_product
   implicit none
 
   class(eigen_type), intent(out) :: E

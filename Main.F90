@@ -1,30 +1,9 @@
 program MutualInfoIntegralTransport
-  use Utility,       only : linspace, vec, copy_matrix
-  use ColProbSlab,   only : geom_type, slab_type, block_type
+  use Utility,       only : linspace, vec, copy 
+  use Input,         only : coarsen, reflect, nIter
+  use ColProbSlab,   only : geom_type, slab_type, block_type, initialize_geom
   use Eigen,         only : eigen_type
   implicit none
-
-  real(8), parameter :: SlabWidth = 20.d0
-  integer, parameter :: Nmax      = 1000 !5120 !20480 !5120
-  integer, parameter :: nIter     = 1
-  real(8), parameter :: CorrelTol = 1.d-6
-
-  integer, parameter :: ProbDim = 2
-
-  logical, parameter :: coarsen = .false.
-  logical, parameter :: reflect = .false.
-  logical, parameter :: split   = .false.
-
-  real(8), parameter :: base_SigmaT   = 1.0d0
-  real(8), parameter :: base_pScatter = 0.9d0
-  real(8), parameter :: base_SigmaF   = base_SigmaT * ( 1.d0 - base_pScatter )
-  real(8), parameter :: base_nubar    = 1.d0
-
-  real(8), parameter :: xleft = 9.d0, xright = 11.1d0
-
-  real(8), parameter :: pi = acos(-1.d0)
-
-  !>>>>
 
   type(eigen_type) :: Eig
   type(slab_type)  :: slab
@@ -32,9 +11,7 @@ program MutualInfoIntegralTransport
 
   class(geom_type), allocatable :: geom
 
-  real(8) :: dx
-
-  real(8), allocatable :: x(:), p(:), q(:), r(:), F(:,:), G(:,:), B(:,:)
+  real(8), allocatable :: p(:), q(:), r(:), F(:,:), G(:,:), B(:,:)
 
   real(8), allocatable :: MutualInfo(:), Correl(:)
   real(8), allocatable :: tmp(:,:)
@@ -43,77 +20,26 @@ program MutualInfoIntegralTransport
   integer :: nMesh
   integer :: i, j, m, N
 
-  if ( ProbDim == 1 ) then
-    allocate( geom, source = slab )
-  elseif ( ProbDim == 2 ) then
-    allocate( geom, source = block )
-  else
-    write(*,*) 'program supports slabs in 1d or 2d only.' ; stop
-  endif
-
-  select type ( geom )
-  type is ( slab_type ) 
-    ! >>>>> initialization
-    N = Nmax
-    x = linspace(0.d0,SlabWidth,N+1)
-    dx = SlabWidth / N
-
-    geom%n     = Nmax
-    geom%width = SlabWidth
-    geom%x     = linspace(0.d0,SlabWidth,N+1)
-    geom%dx    = geom%width / geom%n
-
-    geom%SigmaT   = vec( base_SigmaT, N )
-    geom%pScatter = vec( base_pScatter, N )
-    geom%SigmaF   = vec( base_SigmaF, N )
-    geom%nubar    = vec( base_nubar, N )
-    geom%nuSigmaF = vec( base_nubar*base_SigmaF, N )
-
-    ! split slab, set zone between xleft and xright to be pure capture
-    if ( split ) then
-      do i=1,N
-        if ( geom%x(i) >= xleft .and. geom%x(i+1) <= xright ) then
-          geom%pScatter(i) = 0.d0
-          geom%nuSigmaF(i) = 0.d0
-        endif
-      enddo
-    endif
-  type is ( block_type )
-    geom%nx   = 20
-    geom%ny   = 20
-    geom%xmax = 5.d0
-    geom%ymax = 5.d0
-    geom%nw   = 256
-    geom%dh   = 0.01d0
-
-    geom%x = linspace( 0.d0, geom%xmax, geom%nx+1 )
-    geom%y = linspace( 0.d0, geom%ymax, geom%ny+1 )
-    geom%w = linspace( pi/(geom%nw+1), pi, geom%nw + 1 )
- 
-    N = geom%nx * geom%ny
-
-    geom%SigmaT   = vec( base_SigmaT, N )
-    geom%pScatter = vec( base_pScatter, N )
-    geom%SigmaF   = vec( base_SigmaF, N )
-    geom%nubar    = vec( base_nubar, N )
-    geom%nuSigmaF = vec( base_nubar*base_SigmaF, N )
-  end select
-
-  call geom%collision_probability( F )
+  ! >>>>> initialize and calculate fission matrix
+  call initialize_geom( geom )
   call geom%fission_matrix( F )
 
+  N = geom%mesh_size()
+
   ! >>>>> reflect slab if desired
-  if ( reflect .and. same_type_as(geom,slab) ) then
-    if ( allocated( G ) )  deallocate( G )
-    allocate( G(1:N,1:N) )
+  select type( geom )
+  type is ( slab_type )
+    if ( reflect ) then
+      N = N/2
+      geom%n = N
+      geom%x = linspace(0.d0,5.d-1*geom%width,N+1)
+      G = copy( F )
 
-    N = N/2
-    x = linspace(0.d0,5.d-1*SlabWidth,N+1)
-    G = F
-
-    deallocate( F ) ; allocate( F(1:N,1:N) )
-    F(1:N,1:N) = G(1:N,1:N) + G(2*N:N+1:-1,1:N)
-  endif
+      deallocate( F ) ; allocate( F(1:N,1:N) )
+      F(1:N,1:N) = G(1:N,1:N) + G(2*N:N+1:-1,1:N)
+      deallocate( G )
+    endif
+  end select
 
   ! >>>>> eigenvalues and eigenvectors
   ! find first two eigenvalues and eigenvectors of fission matrix
@@ -133,11 +59,8 @@ program MutualInfoIntegralTransport
   if ( allocated( MutualInfo ) )  deallocate( MutualInfo )
   if ( allocated( Correl ) )      deallocate( Correl )
   allocate( MutualInfo(1:nIter), Correl(1:nIter) )
-  G = copy_matrix( F )
-  
-  if ( allocated( r ) )  deallocate( r )
-  allocate( r(1:N) )
-  r = p
+  G = copy( F )
+  r = copy( p )
 
   do m=1,nIter
 

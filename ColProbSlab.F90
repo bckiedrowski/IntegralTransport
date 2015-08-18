@@ -12,9 +12,18 @@ module ColProbSlab
     real(8), allocatable :: nubar(:)
     real(8), allocatable :: nuSigmaF(:)
     CONTAINS
-      procedure                  :: collision_probability
-      procedure, non_overridable :: fission_matrix
+      procedure                     :: collision_probability
+      procedure, non_overridable    :: fission_matrix
+      procedure(meshsize), deferred :: mesh_size
   end type geom_type
+
+  abstract interface
+    function meshsize( geom )
+      import geom_type
+      class(geom_type), intent(in) :: geom
+      integer                      :: meshsize
+    end function meshsize
+  end interface
 
   type, extends(geom_type) :: slab_type
     integer              :: n
@@ -22,6 +31,7 @@ module ColProbSlab
     real(8), allocatable :: x(:)
     CONTAINS
       procedure :: collision_probability => collision_probability_slab
+      procedure :: mesh_size             => mesh_size_slab
   end type slab_type
 
   type, extends(geom_type) :: block_type
@@ -30,6 +40,7 @@ module ColProbSlab
     real(8), allocatable :: x(:), y(:), w(:)
     CONTAINS
       procedure :: collision_probability => collision_probability_block !collision_probability_slab
+      procedure :: mesh_size             => mesh_size_block
   end type block_type
 
   type :: ray_type
@@ -47,17 +58,99 @@ module ColProbSlab
 CONTAINS
 
 !------------------------------------------------------------------------------
+subroutine initialize_geom( geom )
+  use Input
+  use Utility, only : vec, linspace
+  implicit none
+
+  class(geom_type), allocatable, intent(inout) :: geom
+
+  type(slab_type)  :: slab
+  type(block_type) :: block
+
+  integer :: i
+
+  if ( ProbDim == 1 ) then
+    allocate( geom, source = slab )
+  elseif ( ProbDim == 2 ) then
+    allocate( geom, source = block )
+  else
+    write(*,*) 'program supports slabs in 1d or 2d only.' ; stop
+  endif
+
+  select type ( geom )
+  type is ( slab_type ) 
+    ! >>>>> initialization
+    geom%n     = NMesh_1D
+    geom%width = SlabWidth_1D
+    geom%x     = linspace( 0.d0, geom%width, geom%n+1 )
+    geom%dx    = geom%width / geom%n
+
+    ! split slab, set zone between xleft and xright to be pure capture
+    if ( split_1D ) then
+      do i=1,geom%n
+        if ( geom%x(i) >= Split_xleft_1D .and. geom%x(i+1) <= Split_xright_1D ) then
+          geom%pScatter(i) = 0.d0
+          geom%nuSigmaF(i) = 0.d0
+        endif
+      enddo
+    endif
+  type is ( block_type )
+    geom%nx   = NMesh_X_2D 
+    geom%ny   = NMesh_Y_2D
+    geom%xmax = SlabWidth_X_2D
+    geom%ymax = SlabWidth_Y_2D
+    geom%nw   = NAngles_2D
+    geom%dh   = RaySpacing_2D
+
+    geom%x = linspace( 0.d0, geom%xmax, geom%nx+1 )
+    geom%y = linspace( 0.d0, geom%ymax, geom%ny+1 )
+    geom%w = linspace( pi/(geom%nw+1), pi, geom%nw + 1 )
+  end select
+
+  geom%SigmaT   = vec( base_SigmaT, geom%mesh_size() )
+  geom%pScatter = vec( base_pScatter, geom%mesh_size() )
+  geom%SigmaF   = vec( base_SigmaF, geom%mesh_size() )
+  geom%nubar    = vec( base_nubar, geom%mesh_size() )
+  geom%nuSigmaF = vec( base_nubar*base_SigmaF, geom%mesh_size() )
+
+end subroutine initialize_geom
+
+!------------------------------------------------------------------------------
+integer function mesh_size_slab( geom )  result(n)
+  implicit none
+
+  class(slab_type), intent(in) :: geom
+
+  n = geom%n
+
+end function mesh_size_slab
+
+!------------------------------------------------------------------------------
+integer function mesh_size_block( geom )  result(n)
+  implicit none
+
+  class(block_type), intent(in) :: geom
+
+  n = geom%nx * geom%ny
+
+end function mesh_size_block
+
+!------------------------------------------------------------------------------
 subroutine fission_matrix( geom, G )
   use MatrixInverse, only : matinv
   implicit none
 
-  class(geom_type), intent(in)    :: geom
-  real(8),          intent(inout) :: G(:,:)     ! collision prob. matrix -> fission matrix
+  class(geom_type),     intent(in)    :: geom
+  real(8), allocatable, intent(inout) :: G(:,:) 
 
   real(8), allocatable :: ICG(:,:)     ! identity matrix - diagonal scattering matrix * transfer matrix
   real(8), allocatable :: ICGinv(:,:)  ! inverse of I - CG
 
   integer :: i, n
+
+  ! >>>> compute first collision probability matrix
+  call geom%collision_probability( G )
 
   ! >>>>> first compute scattering matrix if needed
   n = size( G, dim=1 )

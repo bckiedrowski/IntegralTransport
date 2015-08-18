@@ -1,6 +1,10 @@
 module Utility
   implicit none
 
+  interface copy
+    module procedure copy_vector, copy_matrix
+  end interface
+
 CONTAINS
 
 !-------------------------------------------------------------------------------
@@ -39,6 +43,23 @@ function linspace( a, b, N )  result(x)
   endif
 
 end function linspace
+
+!-------------------------------------------------------------------------------
+function copy_vector( u )  result(v)
+  implicit none
+
+  real(8), intent(in) :: u(:)
+
+  real(8), allocatable :: v(:)
+
+  integer :: n
+
+  n = size( u, dim=1 )
+  if ( allocated( v ) )  deallocate( v )
+  allocate( v(1:n) )
+  v(:) = u(:)
+
+end function copy_vector
 
 !-------------------------------------------------------------------------------
 function copy_matrix( A )  result(B)
