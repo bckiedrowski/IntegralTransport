@@ -1,7 +1,7 @@
 program MutualInfoIntegralTransport
   use Utility,       only : vec, matrix, copy 
   use Input,         only : nIter
-  use ColProbSlab,   only : geom_type, initialize_geom
+  use ColProbGeom,   only : geom_type, initialize_geom
   use Eigen,         only : eigen_type
   implicit none
 

@@ -1,4 +1,4 @@
-module ColProbSlab
+module ColProbGeom
   implicit none
 
   real(8), parameter :: pi = acos(-1.d0)
@@ -564,4 +564,4 @@ subroutine integrate_ray( ray, geom, G )
 
 end subroutine integrate_ray
 
-end module ColProbSlab
+end module ColProbGeom
