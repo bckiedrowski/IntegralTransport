@@ -9,7 +9,7 @@ program MutualInfoIntegralTransport
   type(slab_type)  :: slab
   type(block_type) :: block
 
-  class(geom_type), allocatable :: geom
+  class(geom_type), allocatable :: geom, geom_copy
 
   real(8), allocatable :: p(:), q(:), r(:), F(:,:), G(:,:), B(:,:)
 
@@ -45,6 +45,7 @@ program MutualInfoIntegralTransport
   MutualInfo = vec( nIter )
   Correl     = vec( nIter )
   G = copy( F )
+  allocate( geom_copy, source = geom )
 
   do m=1,nIter
 
@@ -105,6 +106,7 @@ program MutualInfoIntegralTransport
     if ( m /= nIter ) then
       F = matmul(F,G)
     endif
+    geom = geom_copy
   enddo
 
   write(*,'("correction factor   = " f12.5)') sqrt( 1.d0 + 2.d0*Correl(1)/(1.d0 - DomRatio) )

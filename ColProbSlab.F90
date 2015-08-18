@@ -12,10 +12,12 @@ module ColProbSlab
     real(8), allocatable :: nubar(:)
     real(8), allocatable :: nuSigmaF(:)
     CONTAINS
-      procedure,           non_overridable :: fission_matrix
-      procedure(meshsize), deferred        :: mesh_size
-      procedure(colprob),  deferred        :: collision_probability
-      procedure(reflgeom), deferred        :: reflect
+      procedure,              non_overridable :: fission_matrix
+      procedure(meshsize),    deferred        :: mesh_size
+      procedure(colprob),     deferred        :: collision_probability
+      procedure(reflgeom),    deferred        :: reflect
+      procedure (assigngeom), deferred        :: assign_geom
+      generic :: assignment(=) => assign_geom
   end type geom_type
 
   abstract interface
@@ -34,6 +36,11 @@ module ColProbSlab
       class(geom_type),     intent(inout) :: geom
       real(8), allocatable, intent(inout) :: G(:,:)
     end subroutine reflgeom
+    subroutine assigngeom( gnew, geom )
+      import geom_type
+      class(geom_type), intent(out) :: gnew
+      class(geom_type), intent(in)  :: geom
+    end subroutine assigngeom
   end interface
 
   type, extends(geom_type) :: slab_type
@@ -42,6 +49,7 @@ module ColProbSlab
     real(8)              :: width, dx
     real(8), allocatable :: x(:)
     CONTAINS
+      procedure :: assign_geom           => assign_slab
       procedure :: collision_probability => collision_probability_slab
       procedure :: mesh_size             => mesh_size_slab
       procedure :: reflect               => reflect_slab
@@ -53,6 +61,7 @@ module ColProbSlab
     real(8)              :: xmax, ymax, dx, dy, dh
     real(8), allocatable :: x(:), y(:), w(:)
     CONTAINS
+      procedure :: assign_geom           => assign_block
       procedure :: collision_probability => collision_probability_block !collision_probability_slab
       procedure :: mesh_size             => mesh_size_block
       procedure :: reflect               => reflect_block
@@ -134,6 +143,63 @@ subroutine initialize_geom( geom )
   geom%nuSigmaF = vec( base_nubar*base_SigmaF, geom%mesh_size() )
 
 end subroutine initialize_geom
+
+!------------------------------------------------------------------------------
+subroutine assign_slab( gnew, geom )
+  use Utility, only : copy
+  implicit none
+
+  class(slab_type), intent(out) :: gnew
+  class(geom_type), intent(in)  :: geom
+
+  select type(geom) 
+  type is (slab_type) 
+    gnew%n     = geom%n      
+    gnew%width = geom%width  
+    gnew%dx    = geom%dx     
+    gnew%fold  = geom%fold   
+
+    gnew%x        = copy(geom%x)      
+    gnew%SigmaT   = copy(geom%SigmaT) 
+    gnew%pScatter = copy(geom%pScatter) 
+    gnew%SigmaF   = copy(geom%SigmaF) 
+    gnew%nubar    = copy(geom%nubar) 
+    gnew%nuSigmaF = copy(geom%nuSigmaF) 
+  end select
+
+end subroutine assign_slab
+
+!------------------------------------------------------------------------------
+subroutine assign_block( gnew, geom )
+  use Utility, only : copy
+  implicit none
+
+  class(block_type), intent(out) :: gnew
+  class(geom_type),  intent(in)  :: geom
+
+  select type(geom) 
+  type is (block_type) 
+    gnew%nx   = geom%nx   
+    gnew%ny   = geom%ny   
+    gnew%xmax = geom%xmax 
+    gnew%ymax = geom%ymax 
+    gnew%nw   = geom%nw   
+    gnew%dh   = geom%dh   
+    gnew%fold = geom%fold 
+
+    geom%x = copy(geom%x) 
+    geom%y = copy(geom%y) 
+    geom%w = copy(geom%w) 
+
+    gnew%x        = copy(geom%x)      
+    gnew%SigmaT   = copy(geom%SigmaT) 
+    gnew%pScatter = copy(geom%pScatter) 
+    gnew%SigmaF   = copy(geom%SigmaF) 
+    gnew%nubar    = copy(geom%nubar) 
+    gnew%nuSigmaF = copy(geom%nuSigmaF) 
+  end select
+
+end subroutine assign_block
 
 !------------------------------------------------------------------------------
 integer function mesh_size_slab( geom )  result(n)
