@@ -1,7 +1,7 @@
 module Input
   implicit none
 
-  integer, parameter :: ProbDim = 2
+  integer, parameter :: ProbDim = 1
 
   integer, parameter :: nIter   = 1
   logical, parameter :: coarsen = .false.

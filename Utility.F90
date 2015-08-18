@@ -4,22 +4,51 @@ module Utility
   interface copy
     module procedure copy_vector, copy_matrix
   end interface
+  interface vec
+    module procedure new_vector, uniform_vector
+  end interface
+  interface matrix
+    module procedure new_matrix
+  end interface
 
 CONTAINS
 
 !-------------------------------------------------------------------------------
-function vec( a, N )  result(x)
+function new_vector( N )  result(x)
+  implicit none
+
+  integer, intent(in)  :: N
+  real(8), allocatable :: x(:)
+
+  if ( allocated(x) )  deallocate( x )
+  allocate( x(1:max(1,N)) )
+
+end function new_vector
+
+!-------------------------------------------------------------------------------
+function uniform_vector( a, N )  result(x)
   implicit none
 
   real(8), intent(in)  :: a
   integer, intent(in)  :: N
   real(8), allocatable :: x(:)
 
-  if ( allocated(x) )  deallocate( x )
-  allocate( x(1:max(1,N)) )
+  x = new_vector( N )
   x(1:N) = a
 
-end function vec
+end function uniform_vector
+
+!-------------------------------------------------------------------------------
+function new_matrix( n, m )  result(A)
+  implicit none
+
+  integer, intent(in)  :: n, m
+  real(8), allocatable :: A(:,:)
+
+  if ( allocated(A) )  deallocate( A )
+  allocate( A(1:max(1,n), 1:max(1,m)) )
+
+end function new_matrix
 
 !-------------------------------------------------------------------------------
 function linspace( a, b, N )  result(x)

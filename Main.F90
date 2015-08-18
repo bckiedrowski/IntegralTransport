@@ -1,5 +1,5 @@
 program MutualInfoIntegralTransport
-  use Utility,       only : linspace, vec, copy 
+  use Utility,       only : linspace, vec, matrix, copy 
   use Input,         only : coarsen, reflect, nIter
   use ColProbSlab,   only : geom_type, slab_type, block_type, initialize_geom
   use Eigen,         only : eigen_type
@@ -35,7 +35,7 @@ program MutualInfoIntegralTransport
       geom%x = linspace(0.d0,5.d-1*geom%width,N+1)
       G = copy( F )
 
-      deallocate( F ) ; allocate( F(1:N,1:N) )
+      F = matrix( N, N )
       F(1:N,1:N) = G(1:N,1:N) + G(2*N:N+1:-1,1:N)
       deallocate( G )
     endif
@@ -48,7 +48,7 @@ program MutualInfoIntegralTransport
   
   ! scale fission matrix by 1/k and find pmf vector
   F = F / Eig%val(1)
-  p = Eig%vec(1)%v / sum( Eig%vec(1)%v )
+  r = copy( Eig%vec(1)%v ) / sum( Eig%vec(1)%v )
 
   write(*,'(" mesh            = ", i12)')   N
   write(*,'(" keff            = ", f12.5)') Eig%val(1)
@@ -56,26 +56,21 @@ program MutualInfoIntegralTransport
   write(*,'(" mutual info     = ")') 
 
   ! >>>>> mutual information calculation
-  if ( allocated( MutualInfo ) )  deallocate( MutualInfo )
-  if ( allocated( Correl ) )      deallocate( Correl )
-  allocate( MutualInfo(1:nIter), Correl(1:nIter) )
+  MutualInfo = vec( nIter )
+  Correl     = vec( nIter )
   G = copy( F )
-  r = copy( p )
 
   do m=1,nIter
 
-    if ( allocated( B ) )  deallocate( B )
-    allocate( B(1:N,1:N) )
+    B = matrix( N, N )
     do i=1,N
       B(i,:) = F(i,:) * r(:)
     enddo  
  
     nMesh = N
     do
- 
-      if ( allocated( p ) )  deallocate( p )
-      if ( allocated( q ) )  deallocate( q )
-      allocate( p(1:nMesh), q(1:nMesh) )
+
+      p = vec( nMesh ) ; q = vec( nMesh ) 
       do i=1,nMesh
         p(i) = sum( B(i,:) )
         q(i) = sum( B(:,i) )
@@ -103,7 +98,7 @@ program MutualInfoIntegralTransport
 
       if ( coarsen .and. mod(nMesh,2) == 0 .and. same_type_as(geom,slab) ) then
         ! coarsen by a factor of two
-        allocate( tmp(1:nMesh/2,1:nMesh/2) )
+        tmp = matrix( nMesh/2, nMesh/2 )
         tmp = 0.d0
         do j=1,nMesh,2
           do i=1,nMesh,2
@@ -112,8 +107,7 @@ program MutualInfoIntegralTransport
         enddo  
         nMesh = nMesh / 2
 
-        deallocate( B )
-        allocate( B(1:nMesh,1:nMesh) )
+        B = copy( tmp )
         B = tmp
         deallocate( tmp )  
       else  

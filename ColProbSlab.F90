@@ -72,15 +72,17 @@ subroutine initialize_geom( geom )
 
   if ( ProbDim == 1 ) then
     allocate( geom, source = slab )
+    write(*,'(" 1d slab ")')
   elseif ( ProbDim == 2 ) then
     allocate( geom, source = block )
+    write(*,'(" 2d block ")')
   else
     write(*,*) 'program supports slabs in 1d or 2d only.' ; stop
   endif
 
+  ! >>>>> initialization
   select type ( geom )
   type is ( slab_type ) 
-    ! >>>>> initialization
     geom%n     = NMesh_1D
     geom%width = SlabWidth_1D
     geom%x     = linspace( 0.d0, geom%width, geom%n+1 )
@@ -144,7 +146,7 @@ subroutine fission_matrix( geom, G )
   class(geom_type),     intent(in)    :: geom
   real(8), allocatable, intent(inout) :: G(:,:) 
 
-  real(8), allocatable :: ICG(:,:)     ! identity matrix - diagonal scattering matrix * transfer matrix
+  real(8), allocatable :: ICG(:,:)     ! identity matrix - diagonal scattering matrix * col. prob. matrix
   real(8), allocatable :: ICGinv(:,:)  ! inverse of I - CG
 
   integer :: i, n
@@ -152,7 +154,7 @@ subroutine fission_matrix( geom, G )
   ! >>>> compute first collision probability matrix
   call geom%collision_probability( G )
 
-  ! >>>>> first compute scattering matrix if needed
+  ! >>>>> compute scattering matrix if needed
   n = size( G, dim=1 )
   if ( any( geom%pScatter > 0.d0 ) ) then
     if ( allocated( ICG ) )     deallocate( ICG )
