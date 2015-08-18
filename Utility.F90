@@ -4,6 +4,20 @@ module Utility
 CONTAINS
 
 !-------------------------------------------------------------------------------
+function vec( a, N )  result(x)
+  implicit none
+
+  real(8), intent(in)  :: a
+  integer, intent(in)  :: N
+  real(8), allocatable :: x(:)
+
+  if ( allocated(x) )  deallocate( x )
+  allocate( x(1:max(1,N)) )
+  x(1:N) = a
+
+end function vec
+
+!-------------------------------------------------------------------------------
 function linspace( a, b, N )  result(x)
   implicit none
 

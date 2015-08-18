@@ -3,21 +3,33 @@ module ColProbSlab
 
   real(8), parameter :: pi = acos(-1.d0)
 
-  private :: collision_probability
+  private :: collision_probability_slab, collision_probability_block
 
-  type :: slab_type
+  type, abstract :: geom_type
+    real(8), allocatable :: pScatter(:)
+    real(8), allocatable :: SigmaF(:)
+    real(8), allocatable :: nubar(:)
+    real(8), allocatable :: nuSigmaF(:)
+    CONTAINS
+      procedure                  :: collision_probability
+      procedure, non_overridable :: fission_matrix
+  end type geom_type
+
+  type, extends(geom_type) :: slab_type
     integer              :: n
     real(8)              :: width, dx
     real(8), allocatable :: x(:)
     CONTAINS
-      procedure :: collision_probability
-  end type
+      procedure :: collision_probability => collision_probability_slab
+  end type slab_type
 
-  type :: block_type
+  type, extends(geom_type) :: block_type
     integer              :: nx, ny, nw
     real(8)              :: xmax, ymax, dx, dy, dh
     real(8), allocatable :: x(:), y(:), w(:)
-  end type
+    CONTAINS
+      procedure :: collision_probability => collision_probability_block !collision_probability_slab
+  end type block_type
 
   type :: ray_type
     real(8) :: x0, y0, w
@@ -33,94 +45,127 @@ module ColProbSlab
 
 CONTAINS
 
-subroutine test2d( G )
+!------------------------------------------------------------------------------
+subroutine fission_matrix( geom, G )
+  use MatrixInverse, only : matinv
+  implicit none
+
+  class(geom_type), intent(in)    :: geom
+  real(8),          intent(inout) :: G(:,:)     ! collision prob. matrix -> fission matrix
+
+  real(8), allocatable :: ICG(:,:)     ! identity matrix - diagonal scattering matrix * transfer matrix
+  real(8), allocatable :: ICGinv(:,:)  ! inverse of I - CG
+
+  integer :: i, n
+
+  ! >>>>> first compute scattering matrix if needed
+  n = size( G, dim=1 )
+  if ( any( geom%pScatter > 0.d0 ) ) then
+    if ( allocated( ICG ) )     deallocate( ICG )
+    if ( allocated( ICGinv ) )  deallocate( ICGinv )
+
+    allocate( ICG(1:n,1:n), ICGinv(1:n,1:n) )
+    do i=1,n
+      ICG(i,:) = -geom%pScatter(i) * G(i,:)
+      ICG(i,i) = 1.d0 + ICG(i,i)
+    enddo
+    call matinv( ICG, ICGinv, n )     ! returns ICGinv, inverse of ICG; destroys input matrix ICG
+    G = matmul( G, ICGinv )           ! multiply by initial matrix G to include scattering
+
+    deallocate( ICG, ICGinv )
+  endif
+
+  ! >>>>> then compute fission matrix
+  ! multiply by nu-sigmaf diagonal matrix to convert to fission matrix
+  do i=1,n
+    G(i,:) = geom%nuSigmaF(i) * G(i,:)
+  enddo
+
+end subroutine fission_matrix
+
+!------------------------------------------------------------------------------
+subroutine collision_probability( geom, G ) 
+  implicit none
+
+  class(geom_type),     intent(in)    :: geom
+  real(8), allocatable, intent(inout) :: G(:,:)
+
+  write(*,*) 'geometry has not been initialized.'
+  stop
+
+end subroutine collision_probability
+
+!------------------------------------------------------------------------------
+subroutine collision_probability_slab( geom, G )
+  use ExpIntegral, only : En => ExpIntN
+  implicit none
+
+  class(slab_type),     intent(in)    :: geom
+  real(8), allocatable, intent(inout) :: G(:,:)
+
+  real(8) :: t, p, dx
+  integer :: i, j, n
+
+  n = geom%n ; dx = geom%dx
+  if ( allocated( G ) )  deallocate( G )
+  allocate( G(1:n,1:n) )
+
+  G = 0.d0
+  do j=1,n
+    G(j,j) = 1.d0 - ( 1.d0 - 2.d0*En(3,dx) )/(2.d0*dx)
+    do i=j+1,n
+      t = (abs(j-i)-1)*dx
+      p = 0.5d0/dx*( En(3,t) - 2.d0*En(3,t+dx) + En(3,t+2.d0*dx) )
+      G(i,j) = p ; G(j,i) = p
+    enddo
+  enddo
+
+end subroutine collision_probability_slab
+
+!------------------------------------------------------------------------------
+subroutine collision_probability_block( geom, G )
   use Utility, only : linspace
   implicit none
 
+  class(block_type),    intent(in)    :: geom
   real(8), allocatable, intent(inout) :: G(:,:)
 
-  type(block_type) :: block
-
   type(ray_vector_type) :: rvec
-
 
   real(8) :: dx, dy, dh, dw
   integer :: i, j, n, M
 
-  block%nx   = 40
-  block%ny   = 40
-  block%xmax = 5.d0
-  block%ymax = 5.d0
+  dx = geom%xmax / geom%nx
+  dy = geom%ymax / geom%ny
+  dh = geom%dh
+  dw = geom%w(2) - geom%w(1)
 
-  block%x = linspace( 0.d0, block%xmax, block%nx+1 )
-  block%y = linspace( 0.d0, block%ymax, block%ny+1 )
-
-  block%nw = 512 !256
-  block%dh = 0.001d0
-  block%w  = linspace( pi/(block%nw+1), pi, block%nw + 1 )
-
-  dx = block%xmax / block%nx
-  dy = block%ymax / block%ny
-  dh = block%dh
-  dw = block%w(2) - block%w(1)
-
-  M = block%nx*block%ny
+  M = geom%nx * geom%ny
   if ( allocated( G ) )  deallocate( G )
   allocate( G(1:M,1:M) ) ; G = 0.d0
 
   n = 0
-  do i=1,block%nw
-    call rvec%create_rays( block, i )
+  do i=1,geom%nw
+    ! for each direction, get a vector of rays intersecting geometry
+    call rvec%create_rays( geom, i )
     n = n + rvec%n
 
-    ! loop over each ray and perform integration
+    ! loop over each ray and perform integration of collision kernel
     do j=1,rvec%n
-      call rvec%ray(j)%integrate_ray( block, G )
+      call rvec%ray(j)%integrate_ray( geom, G )
     enddo
-
-    write(*,*) block%w(i) / pi * 180.d0, rvec%n
+    !write(*,*) geom%w(i) / pi * 180.d0, rvec%n
   enddo
 
-  !G = dh*dw*G/(pi*dx*dy)
-
+  ! finalize collision probability matrix (normalize and compute diagnonal)
   G = G*dh*dw/(2.d0*pi*dx*dy)
   do j=1,M
-    G(j,j) = 1.d0 - 2.d0*G(j,j) !2.d0*dx*dy*G(j,j)
-!!    do i=j+1,M
-!!      G(j,i) = G(i,j)
-!!    enddo
+    G(j,j) = 1.d0 - 2.d0*G(j,j) 
   enddo
 
-!  do j=1,M
-!    !write(*,'(25es8.1)')  G(:,j)
-!    !write(*,'(es12.4)')  G(j,1)
-!  enddo
-!  write(*,*) sum(G(:,1))
-!  write(*,*) n
+end subroutine collision_probability_block
 
-end subroutine test2d
-
-real(8) function collision_probability( slab, i, j )  result(p)
-  use ExpIntegral, only : En => ExpIntN
-  implicit none
-
-  class(slab_type), intent(in) :: slab
-  integer,          intent(in) :: i, j
-
-  real(8) :: dx
-  real(8) :: t  ! optical depth between elements j and i
-
-  dx = slab%dx
-  if ( i == j ) then
-    p = 1.d0 - ( 1.d0 - 2.d0*En(3,dx) )/(2.d0*dx)
-  else
-    t = (abs(j-i)-1)*dx
-    p = 0.5d0/dx*( En(3,t) - 2.d0*En(3,t+dx) + En(3,t+2.d0*dx) )
-  endif
-
-end function collision_probability
-
-
+!------------------------------------------------------------------------------
 subroutine create_rays( rvec, geom, n )
   implicit none
 
@@ -158,26 +203,21 @@ subroutine create_rays( rvec, geom, n )
   if ( allocated( rvec%ray ) )  deallocate( rvec%ray )
   allocate( rvec%ray(1:rvec%n) )
 
-  !u = 0.0d0 ; k = 1
-  u = 0.5d0*du; k = 1
+  u = 0.0d0 ; k = 1
+  !u = 0.5d0*du; k = 1
   do while ( u < geom%xmax )
     rvec%ray(k)%x0 = u
     rvec%ray(k)%y0 = 0.d0
     u = u + du ; k = k + 1
   enddo
 
-  !v = 0.0d0
-  v = 0.5d0*dv
+  v = 0.0d0
+  !v = 0.5d0*dv
   do while ( v < geom%ymax )
     rvec%ray(k)%x0 = merge( 0.d0, geom%xmax, geom%w(n) < half_pi )
     rvec%ray(k)%y0 = v
     v = v + dv ; k = k + 1
   enddo
-
-!  do k=1,rvec%n
-!    write(*,'(i4,2f12.5)') k, rvec%ray(k)%x0, rvec%ray(k)%y0
-!  enddo
-!  write(*,*)
 
   ! all rays have same direction
   rvec%ray(1:rvec%n)%w = geom%w(n)
@@ -214,9 +254,8 @@ subroutine integrate_ray( ray, geom, A )
 
   i = 1 + floor( x / geom%xmax * geom%nx )
   j = 1 + floor( y / geom%ymax * geom%ny )
-!  k = i + (j-1)*geom%nx
 
-  ! accumulate the rays
+  ! construct vector of n elements the current ray intersects 
   n = 0
   do while( abs(x - xe) > 1.d-10 .and. abs(y - ye) > 1.d-10 )
 
@@ -238,13 +277,15 @@ subroutine integrate_ray( ray, geom, A )
     endif
   enddo
 
+  ! loop over intersecting elements and compute collision probabilities for this ray
   do l=1,n
-    ! handle within element collision probability
+    ! "within element" collision probability
     j = g(l)%k
     s = g(l)%s
     t = 0.d0
-    A(j,j) = A(j,j) + ( 0.25d0*pi - Kin(3,s) )
+    A(j,j) = A(j,j) + ( 0.25d0*pi - Kin(3,s) ) 
     do m=l+1,n
+      ! collision probabilities for all other elements (use reciprocity/optic symmetry)
       i = g(m)%k
       r = g(m)%s
       p = Kin(3,t) - Kin(3,t+s) - Kin(3,t+r) + Kin(3,t+r+s)
@@ -253,7 +294,6 @@ subroutine integrate_ray( ray, geom, A )
       t = t + r
     enddo
   enddo
-  !write(*,*) 
 
 end subroutine integrate_ray
 

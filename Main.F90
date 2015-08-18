@@ -1,11 +1,11 @@
 program MutualInfoIntegralTransport
-  use Utility,       only : linspace
-  use ColProbSlab,   only : slab_type, test2d
+  use Utility,       only : linspace, vec
+  use ColProbSlab,   only : geom_type, slab_type, block_type
   use Eigen,         only : eigen_type
   implicit none
 
   real(8), parameter :: SlabWidth = 20.d0
-  integer, parameter :: Nmax      = 1600 !5120 !20480 !5120
+  integer, parameter :: Nmax      = 1000 !5120 !20480 !5120
   integer, parameter :: nIter     = 1
   real(8), parameter :: CorrelTol = 1.d-6
 
@@ -22,15 +22,15 @@ program MutualInfoIntegralTransport
 
   real(8), parameter :: xleft = 9.d0, xright = 11.1d0
 
-  !>>>>
+  real(8), parameter :: pi = acos(-1.d0)
 
-  real(8) :: pScatter(1:Nmax) = base_pScatter
-  real(8) :: SigmaF(1:Nmax)   = 1.d0 * ( 1.d0 - base_pScatter )
-  real(8) :: nubar(1:Nmax)    = base_nubar
-  real(8) :: nuSigmaF(1:Nmax) = base_nubar * base_SigmaF
+  !>>>>
 
   type(eigen_type) :: Eig
   type(slab_type)  :: slab
+  type(block_type) :: block
+
+  class(geom_type), allocatable :: geom
 
   real(8) :: dx
 
@@ -44,64 +44,64 @@ program MutualInfoIntegralTransport
   integer :: i, j, m, N
 
   if ( ProbDim == 1 ) then
+    allocate( geom, source = slab )
+  elseif ( ProbDim == 2 ) then
+    allocate( geom, source = block )
+  else
+    write(*,*) 'program supports slabs in 1d or 2d only.' ; stop
+  endif
+
+  select type ( geom )
+  type is ( slab_type ) 
     ! >>>>> initialization
     N = Nmax
     x = linspace(0.d0,SlabWidth,N+1)
     dx = SlabWidth / N
 
-    slab % n     = Nmax
-    slab % width = SlabWidth
-    slab % x     = linspace(0.d0,SlabWidth,N+1)
-    slab % dx    = slab%width / slab%n
+    geom%n     = Nmax
+    geom%width = SlabWidth
+    geom%x     = linspace(0.d0,SlabWidth,N+1)
+    geom%dx    = geom%width / geom%n
+
+    geom%pScatter = vec( base_pScatter, N )
+    geom%SigmaF   = vec( base_SigmaF, N )
+    geom%nubar    = vec( base_nubar, N )
+    geom%nuSigmaF = vec( base_nubar*base_SigmaF, N )
 
     ! split slab, set zone between xleft and xright to be pure capture
     if ( split ) then
       do i=1,N
-        if ( slab%x(i) >= xleft .and. slab%x(i+1) <= xright ) then
-          pScatter(i) = 0.d0
-          nuSigmaF(i) = 0.d0
+        if ( geom%x(i) >= xleft .and. geom%x(i+1) <= xright ) then
+          geom%pScatter(i) = 0.d0
+          geom%nuSigmaF(i) = 0.d0
         endif
       enddo
     endif
+  type is ( block_type )
+    geom%nx   = 40
+    geom%ny   = 40
+    geom%xmax = 5.d0
+    geom%ymax = 5.d0
+    geom%nw   = 1028 !256
+    geom%dh   = 0.001d0
 
-    if ( allocated( F ) )  deallocate( F )
-    if ( allocated( G ) )  deallocate( G )
-    if ( allocated( B ) )  deallocate( B )
-    if ( allocated( p ) )  deallocate( p )
-    if ( allocated( q ) )  deallocate( q )
-    allocate( F(1:N,1:N), G(1:N,1:N), B(1:N,1:N), p(1:N), q(1:N) )
+    geom%x = linspace( 0.d0, geom%xmax, geom%nx+1 )
+    geom%y = linspace( 0.d0, geom%ymax, geom%ny+1 )
+    geom%w = linspace( pi/(geom%nw+1), pi, geom%nw + 1 )
+ 
+    N = geom%nx * geom%ny
 
-    ! >>>>> calculate fission matrix
-    ! first calculate first collision probability matrix and then get fission matrix
-    ! loop over source elements
-    F = 0.d0
-    do j=1,N
-      ! loop over destination elements
-      do i=j,N
-        F(i,j) = slab%collision_probability(i,j)
-        F(j,i) = F(i,j)
-      enddo
-    enddo
-  elseif ( ProbDim == 2 ) then
-    N = Nmax
-    call test2d( F )
-  else
-    write(*,*) 'code supports slabs in 1d or 2d only.' ; stop
-  endif
+    geom%pScatter = vec( base_pScatter, N )
+    geom%SigmaF   = vec( base_SigmaF, N )
+    geom%nubar    = vec( base_nubar, N )
+    geom%nuSigmaF = vec( base_nubar*base_SigmaF, N )
+  end select
 
-  ! apply scattering to first collision probability matrix
-  if ( any(pScatter > 0.d0) ) then
-    call scattering( F )
-  endif
-
-  ! multiply by nu-sigmaf diagonal matrix to convert to fission matrix
-  do i=1,n
-    F(i,:) = nuSigmaF(i) * F(i,:)
-    write(*,'(es12.4)')  F(i,1)
-  enddo
+  call geom%collision_probability( F )
+  call geom%fission_matrix( F )
 
   ! >>>>> reflect slab if desired
-  if ( reflect ) then
+  if ( reflect .and. same_type_as(geom,slab) ) then
     if ( allocated( G ) )  deallocate( G )
     allocate( G(1:N,1:N) )
 
@@ -176,7 +176,7 @@ program MutualInfoIntegralTransport
   
       write(*,'(2i6,3es14.4)') m, nMesh, Entropy, MutualInfo(m), Correl(m) !/ m
 
-      if ( coarsen .and. mod(nMesh,2) == 0 ) then
+      if ( coarsen .and. mod(nMesh,2) == 0 .and. same_type_as(geom,slab) ) then
         ! coarsen by a factor of two
         allocate( tmp(1:nMesh/2,1:nMesh/2) )
         tmp = 0.d0
@@ -205,32 +205,5 @@ program MutualInfoIntegralTransport
   write(*,'("correction factor   = " f12.5)') sqrt( 1.d0 + 2.d0*Correl(1)/(1.d0 - DomRatio) )
 
   ! >>>>> all done
-CONTAINS
-
-! convert first collision matrix G into collision source matrix = G*inv( I - C*G )
-subroutine scattering( G )
-  use MatrixInverse, only : matinv
-  implicit none
-
-  real(8), intent(inout) :: G(:,:)     ! transfer matrix -> scattered transfer matrix
-
-  real(8), allocatable :: ICG(:,:)     ! identity matrix - diagonal scattering matrix * transfer matrix
-  real(8), allocatable :: ICGinv(:,:)  ! inverse of I - CG
-
-  integer :: i, n
-
-  n = size( G, dim=1 )
-  if ( allocated( ICG ) )     deallocate( ICG )
-  if ( allocated( ICGinv ) )  deallocate( ICGinv )
-
-  allocate( ICG(1:n,1:n), ICGinv(1:n,1:n) )
-  do i=1,n
-    ICG(i,:) = -pScatter(i) * G(i,:)
-    ICG(i,i) = 1.d0 + ICG(i,i)
-  enddo
-  call matinv( ICG, ICGinv, n )     ! returns ICGinv, inverse of ICG; destroys input matrix ICG
-  G = matmul( G, ICGinv )           ! multiply by initial matrix G to include scattering
-
-end subroutine scattering
 
 end program MutualInfoIntegralTransport
