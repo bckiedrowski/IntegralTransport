@@ -118,8 +118,8 @@ subroutine collision_probability_slab( geom, G )
     t = 0.d0
     do i=j+1,n
       r = geom%SigmaT(i) * dx
-      p = 0.5d0/dx*( En(3,t) - En(3,t+r) - En(3,t+s) + En(3,t+r+s) )
-      G(i,j) = p / geom%SigmaT(j) ; G(j,i) = p / geom%SigmaT(i)
+      p = 0.5d0*( En(3,t) - En(3,t+r) - En(3,t+s) + En(3,t+r+s) )
+      G(i,j) = p / s ; G(j,i) = p / r
       t = t + r
     enddo
   enddo
@@ -136,7 +136,7 @@ subroutine collision_probability_block( geom, G )
 
   type(ray_vector_type) :: rvec
 
-  real(8) :: dx, dy, dh, dw
+  real(8) :: dx, dy, dh, dw, c
   integer :: i, j, n, M
 
   dx = geom%xmax / geom%nx
@@ -162,8 +162,9 @@ subroutine collision_probability_block( geom, G )
   enddo
 
   ! finalize collision probability matrix (normalize and compute diagnonal)
-  G = G*dh*dw/(2.d0*pi*dx*dy)
+  c = dh*dw/(2.d0*pi*dx*dy)
   do j=1,M
+    G(:,j) = G(:,j) * c / geom%SigmaT(j)
     G(j,j) = 1.d0 - 2.d0*G(j,j) 
   enddo
 
@@ -282,19 +283,20 @@ subroutine integrate_ray( ray, geom, G )
   enddo
 
   ! loop over intersecting elements and compute collision probabilities for this ray
+  ! for efficiency multiplying factors common to all rays intersecting i,j must be applied afterward
   do l=1,n
     ! "within element" collision probability
     j = e(l)%k
     s = e(l)%s * geom%SigmaT(j)
     t = 0.d0
-    G(j,j) = G(j,j) + ( 0.25d0*pi - Kin(3,s) ) / geom%SigmaT(j)
+    G(j,j) = G(j,j) + 0.25d0*pi - Kin(3,s) 
     do m=l+1,n
       ! collision probabilities for all other elements (use reciprocity/optic symmetry)
       i = e(m)%k
       r = e(m)%s * geom%SigmaT(i)
       p = Kin(3,t) - Kin(3,t+s) - Kin(3,t+r) + Kin(3,t+r+s) 
-      G(i,j) = G(i,j) + p / geom%SigmaT(j)
-      G(j,i) = G(j,i) + p / geom%SigmaT(i)
+      G(i,j) = G(i,j) + p 
+      G(j,i) = G(j,i) + p 
       t = t + r
     enddo
   enddo
