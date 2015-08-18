@@ -1,7 +1,7 @@
 module Input
   implicit none
 
-  integer, parameter :: ProbDim = 1
+  integer, parameter :: ProbDim = 2
 
   integer, parameter :: nIter   = 1
   logical, parameter :: coarsen = .false.
@@ -16,6 +16,7 @@ module Input
   ! >>>>> 1d data
   real(8), parameter :: SlabWidth_1D = 20.d0
   integer, parameter :: NMesh_1D     = 1000
+  integer, parameter :: Reflect_1D   = 1
   logical, parameter :: split_1D     = .false.
 
   real(8), parameter :: split_XLeft_1D  = 9.d0
@@ -27,6 +28,7 @@ module Input
   integer, parameter :: NMesh_X_2D     = 20
   integer, parameter :: NMesh_Y_2D     = 20
   integer, parameter :: NAngles_2D     = 256
+  integer, parameter :: Reflect_2D     = 0
   real(8), parameter :: RaySpacing_2D  = 0.01d0
 
 end module Input

@@ -20,26 +20,12 @@ program MutualInfoIntegralTransport
   integer :: nMesh
   integer :: i, j, m, N
 
-  ! >>>>> initialize and calculate fission matrix
+  ! >>>>> initialize, calculate fission matrix, apply symmetry if desired
   call initialize_geom( geom )
   call geom%fission_matrix( F )
+  call geom%reflect( F )
 
   N = geom%mesh_size()
-
-  ! >>>>> reflect slab if desired
-  select type( geom )
-  type is ( slab_type )
-    if ( reflect ) then
-      N = N/2
-      geom%n = N
-      geom%x = linspace(0.d0,5.d-1*geom%width,N+1)
-      G = copy( F )
-
-      F = matrix( N, N )
-      F(1:N,1:N) = G(1:N,1:N) + G(2*N:N+1:-1,1:N)
-      deallocate( G )
-    endif
-  end select
 
   ! >>>>> eigenvalues and eigenvectors
   ! find first two eigenvalues and eigenvectors of fission matrix

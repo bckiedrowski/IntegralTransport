@@ -12,35 +12,50 @@ module ColProbSlab
     real(8), allocatable :: nubar(:)
     real(8), allocatable :: nuSigmaF(:)
     CONTAINS
-      procedure                     :: collision_probability
-      procedure, non_overridable    :: fission_matrix
-      procedure(meshsize), deferred :: mesh_size
+      procedure,           non_overridable :: fission_matrix
+      procedure(meshsize), deferred        :: mesh_size
+      procedure(colprob),  deferred        :: collision_probability
+      procedure(reflgeom), deferred        :: reflect
   end type geom_type
 
   abstract interface
+    subroutine colprob( geom, G )
+      import geom_type
+      class(geom_type),     intent(in)    :: geom
+      real(8), allocatable, intent(inout) :: G(:,:)
+    end subroutine colprob
     function meshsize( geom )
       import geom_type
       class(geom_type), intent(in) :: geom
       integer                      :: meshsize
     end function meshsize
+    subroutine reflgeom( geom, G )
+      import geom_type
+      class(geom_type),     intent(inout) :: geom
+      real(8), allocatable, intent(inout) :: G(:,:)
+    end subroutine reflgeom
   end interface
 
   type, extends(geom_type) :: slab_type
     integer              :: n
+    integer              :: fold
     real(8)              :: width, dx
     real(8), allocatable :: x(:)
     CONTAINS
       procedure :: collision_probability => collision_probability_slab
       procedure :: mesh_size             => mesh_size_slab
+      procedure :: reflect               => reflect_slab
   end type slab_type
 
   type, extends(geom_type) :: block_type
     integer              :: nx, ny, nw
+    integer              :: fold
     real(8)              :: xmax, ymax, dx, dy, dh
     real(8), allocatable :: x(:), y(:), w(:)
     CONTAINS
       procedure :: collision_probability => collision_probability_block !collision_probability_slab
       procedure :: mesh_size             => mesh_size_block
+      procedure :: reflect               => reflect_block
   end type block_type
 
   type :: ray_type
@@ -87,6 +102,7 @@ subroutine initialize_geom( geom )
     geom%width = SlabWidth_1D
     geom%x     = linspace( 0.d0, geom%width, geom%n+1 )
     geom%dx    = geom%width / geom%n
+    geom%fold  = merge( Reflect_1D, 0, Reflect_1D == 1 )
 
     ! split slab, set zone between xleft and xright to be pure capture
     if ( split_1D ) then
@@ -104,6 +120,7 @@ subroutine initialize_geom( geom )
     geom%ymax = SlabWidth_Y_2D
     geom%nw   = NAngles_2D
     geom%dh   = RaySpacing_2D
+    geom%fold = merge( Reflect_2D, 0, Reflect_2D == 1 .or. Reflect_2D == 2 )
 
     geom%x = linspace( 0.d0, geom%xmax, geom%nx+1 )
     geom%y = linspace( 0.d0, geom%ymax, geom%ny+1 )
@@ -180,16 +197,40 @@ subroutine fission_matrix( geom, G )
 end subroutine fission_matrix
 
 !------------------------------------------------------------------------------
-subroutine collision_probability( geom, G ) 
+subroutine reflect_slab( geom, G )
+  use Utility, only : copy, matrix, linspace
   implicit none
 
-  class(geom_type),     intent(in)    :: geom
+  class(slab_type),     intent(inout)    :: geom
   real(8), allocatable, intent(inout) :: G(:,:)
 
-  write(*,*) 'geometry has not been initialized.'
-  stop
+  real(8), allocatable :: F(:,:)
 
-end subroutine collision_probability
+  integer :: N
+
+  !N = N/2
+  if ( geom%fold == 1 ) then
+    write(*,'(" reflected at midplane ")') 
+    N = geom%mesh_size() / 2
+    geom%n = N
+    geom%x = linspace( 0.d0, 0.5d0*geom%width, N+1 )
+    F = copy( G )
+
+    G = matrix( N, N )
+    G(1:N,1:N) = F(1:N,1:N) + F(2*N:N+1:-1,1:N)
+    deallocate( F )
+  endif
+
+end subroutine reflect_slab
+
+!------------------------------------------------------------------------------
+subroutine reflect_block( geom, G )
+  implicit none
+
+  class(block_type),     intent(inout)   :: geom
+  real(8), allocatable, intent(inout) :: G(:,:)
+
+end subroutine reflect_block
 
 !------------------------------------------------------------------------------
 subroutine collision_probability_slab( geom, G )
