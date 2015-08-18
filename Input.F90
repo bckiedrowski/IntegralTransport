@@ -1,10 +1,9 @@
 module Input
   implicit none
 
-  integer, parameter :: ProbDim = 1
+  integer, parameter :: ProbDim = 2
 
   integer, parameter :: nIter   = 1
-  logical, parameter :: coarsen = .false.
   logical, parameter :: reflect = .false.
 
   ! >>>>> common data
@@ -15,9 +14,10 @@ module Input
 
   ! >>>>> 1d data
   real(8), parameter :: SlabWidth_1D = 20.d0
-  integer, parameter :: NMesh_1D     = 1000
-  integer, parameter :: Reflect_1D   = 1
+  integer, parameter :: NMesh_1D     = 1280 !1000
+  integer, parameter :: Reflect_1D   = 0
   logical, parameter :: split_1D     = .false.
+  logical, parameter :: coarsen_1D   = .false.
 
   real(8), parameter :: split_XLeft_1D  = 9.d0
   real(8), parameter :: split_XRight_1D = 11.1d0

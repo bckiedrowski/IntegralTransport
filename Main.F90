@@ -1,31 +1,23 @@
 program MutualInfoIntegralTransport
-  use Utility,       only : linspace, vec, matrix, copy 
-  use Input,         only : coarsen, reflect, nIter
-  use ColProbSlab,   only : geom_type, slab_type, block_type, initialize_geom
+  use Utility,       only : vec, matrix, copy 
+  use Input,         only : nIter
+  use ColProbSlab,   only : geom_type, initialize_geom
   use Eigen,         only : eigen_type
   implicit none
 
-  type(eigen_type) :: Eig
-  type(slab_type)  :: slab
-  type(block_type) :: block
-
+  type(eigen_type)              :: Eig
   class(geom_type), allocatable :: geom, geom_copy
 
   real(8), allocatable :: p(:), q(:), r(:), F(:,:), G(:,:), B(:,:)
-
   real(8), allocatable :: MutualInfo(:), Correl(:)
-  real(8), allocatable :: tmp(:,:)
   real(8) :: Entropy, Hq, DomRatio
-
-  integer :: nMesh
-  integer :: i, j, m, N
+  logical :: again
+  integer :: i, j, m, nMesh 
 
   ! >>>>> initialize, calculate fission matrix, apply symmetry if desired
   call initialize_geom( geom )
   call geom%fission_matrix( F )
   call geom%reflect( F )
-
-  N = geom%mesh_size()
 
   ! >>>>> eigenvalues and eigenvectors
   ! find first two eigenvalues and eigenvectors of fission matrix
@@ -36,9 +28,9 @@ program MutualInfoIntegralTransport
   F = F / Eig%val(1)
   r = copy( Eig%vec(1)%v ) / sum( Eig%vec(1)%v )
 
-  write(*,'(" mesh            = ", i12)')   N
+  write(*,'(" mesh            = ", i12)')   geom%mesh_size()
   write(*,'(" keff            = ", f12.5)') Eig%val(1)
-  write(*,'(" dominance ratio = ", f12.5)')  DomRatio
+  write(*,'(" dominance ratio = ", f12.5)') DomRatio
   write(*,'(" mutual info     = ")') 
 
   ! >>>>> mutual information calculation
@@ -48,14 +40,15 @@ program MutualInfoIntegralTransport
   allocate( geom_copy, source = geom )
 
   do m=1,nIter
-
-    B = matrix( N, N )
-    do i=1,N
+    
+    nMesh = geom%mesh_size()
+    B = matrix( nMesh, nMesh )
+    do i=1,nMesh
       B(i,:) = F(i,:) * r(:)
     enddo  
  
-    nMesh = N
-    do
+    do   ! until done coarsening
+      nMesh = geom%mesh_size()
 
       p = vec( nMesh ) ; q = vec( nMesh ) 
       do i=1,nMesh
@@ -83,30 +76,14 @@ program MutualInfoIntegralTransport
   
       write(*,'(2i6,3es14.4)') m, nMesh, Entropy, MutualInfo(m), Correl(m) !/ m
 
-      if ( coarsen .and. mod(nMesh,2) == 0 .and. same_type_as(geom,slab) ) then
-        ! coarsen by a factor of two
-        tmp = matrix( nMesh/2, nMesh/2 )
-        tmp = 0.d0
-        do j=1,nMesh,2
-          do i=1,nMesh,2
-            tmp(1+i/2,1+j/2) = sum( B(i:i+1,j:j+1) )
-          enddo
-        enddo  
-        nMesh = nMesh / 2
-
-        B = copy( tmp )
-        B = tmp
-        deallocate( tmp )  
-      else  
-        exit
-      endif
-
+      call geom%coarsen_mesh( B, again )
+      if ( .not. again ) exit
     enddo
 
     if ( m /= nIter ) then
       F = matmul(F,G)
     endif
-    geom = geom_copy
+    geom = geom_copy   ! restore geometry that may have been coarsened
   enddo
 
   write(*,'("correction factor   = " f12.5)') sqrt( 1.d0 + 2.d0*Correl(1)/(1.d0 - DomRatio) )

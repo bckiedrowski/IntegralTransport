@@ -16,6 +16,7 @@ module ColProbSlab
       procedure(meshsize),    deferred        :: mesh_size
       procedure(colprob),     deferred        :: collision_probability
       procedure(reflgeom),    deferred        :: reflect
+      procedure(coarsengeom), deferred        :: coarsen_mesh
       procedure (assigngeom), deferred        :: assign_geom
       generic :: assignment(=) => assign_geom
   end type geom_type
@@ -36,6 +37,12 @@ module ColProbSlab
       class(geom_type),     intent(inout) :: geom
       real(8), allocatable, intent(inout) :: G(:,:)
     end subroutine reflgeom
+    subroutine coarsengeom( geom, G, success )
+      import geom_type
+      class(geom_type),     intent(inout) :: geom
+      real(8), allocatable, intent(inout) :: G(:,:)
+      logical,              intent(out)   :: success
+    end subroutine coarsengeom
     subroutine assigngeom( gnew, geom )
       import geom_type
       class(geom_type), intent(out) :: gnew
@@ -48,11 +55,13 @@ module ColProbSlab
     integer              :: fold
     real(8)              :: width, dx
     real(8), allocatable :: x(:)
+    logical              :: coarsen
     CONTAINS
       procedure :: assign_geom           => assign_slab
       procedure :: collision_probability => collision_probability_slab
       procedure :: mesh_size             => mesh_size_slab
       procedure :: reflect               => reflect_slab
+      procedure :: coarsen_mesh          => coarsen_slab
   end type slab_type
 
   type, extends(geom_type) :: block_type
@@ -65,6 +74,7 @@ module ColProbSlab
       procedure :: collision_probability => collision_probability_block !collision_probability_slab
       procedure :: mesh_size             => mesh_size_block
       procedure :: reflect               => reflect_block
+      procedure :: coarsen_mesh          => coarsen_block
   end type block_type
 
   type :: ray_type
@@ -107,11 +117,12 @@ subroutine initialize_geom( geom )
   ! >>>>> initialization
   select type ( geom )
   type is ( slab_type ) 
-    geom%n     = NMesh_1D
-    geom%width = SlabWidth_1D
-    geom%x     = linspace( 0.d0, geom%width, geom%n+1 )
-    geom%dx    = geom%width / geom%n
-    geom%fold  = merge( Reflect_1D, 0, Reflect_1D == 1 )
+    geom%n       = NMesh_1D
+    geom%width   = SlabWidth_1D
+    geom%x       = linspace( 0.d0, geom%width, geom%n+1 )
+    geom%dx      = geom%width / geom%n
+    geom%fold    = merge( Reflect_1D, 0, Reflect_1D == 1 )
+    geom%coarsen = coarsen_1D
 
     ! split slab, set zone between xleft and xright to be pure capture
     if ( split_1D ) then
@@ -154,10 +165,11 @@ subroutine assign_slab( gnew, geom )
 
   select type(geom) 
   type is (slab_type) 
-    gnew%n     = geom%n      
-    gnew%width = geom%width  
-    gnew%dx    = geom%dx     
-    gnew%fold  = geom%fold   
+    gnew%n       = geom%n      
+    gnew%width   = geom%width  
+    gnew%dx      = geom%dx     
+    gnew%fold    = geom%fold   
+    gnew%coarsen = geom%coarsen
 
     gnew%x        = copy(geom%x)      
     gnew%SigmaT   = copy(geom%SigmaT) 
@@ -274,7 +286,6 @@ subroutine reflect_slab( geom, G )
 
   integer :: N
 
-  !N = N/2
   if ( geom%fold == 1 ) then
     write(*,'(" reflected at midplane ")') 
     N = geom%mesh_size() / 2
@@ -297,6 +308,54 @@ subroutine reflect_block( geom, G )
   real(8), allocatable, intent(inout) :: G(:,:)
 
 end subroutine reflect_block
+
+!------------------------------------------------------------------------------
+subroutine coarsen_slab( geom, G, success )
+  use Utility, only : copy, matrix, linspace
+  implicit none
+
+  class(slab_type),     intent(inout) :: geom
+  real(8), allocatable, intent(inout) :: G(:,:)
+  logical,              intent(out)   :: success
+
+  real(8), allocatable :: tmp(:,:)
+
+  integer :: i, j, n
+
+  n = geom%mesh_size()
+  if ( geom%coarsen .and. mod(n,2) == 0 ) then
+    ! coarsen by a factor of two
+    tmp = matrix( n/2, n/2 )
+    tmp = 0.d0
+    do j=1,n,2
+      do i=1,n,2
+        tmp(1+i/2,1+j/2) = sum( G(i:i+1,j:j+1) )
+      enddo
+    enddo  
+    G = copy( tmp )
+    deallocate( tmp )
+
+    geom%n  = n/2
+    geom%x  = linspace( 0.d0, geom%width, geom%n+1 )
+    success = .true.  
+  else
+    success = .false.
+  endif
+
+end subroutine coarsen_slab
+
+!------------------------------------------------------------------------------
+subroutine coarsen_block( geom, G, success )
+  use Utility, only : copy, matrix, linspace
+  implicit none
+
+  class(block_type),    intent(inout) :: geom
+  real(8), allocatable, intent(inout) :: G(:,:)
+  logical,              intent(out)   :: success
+
+  success = .false.  ! not implemented yet
+
+end subroutine coarsen_block
 
 !------------------------------------------------------------------------------
 subroutine collision_probability_slab( geom, G )
