@@ -125,16 +125,6 @@ subroutine initialize_geom( geom )
     geom%coarsen = coarsen_1D
 
     call linspace( geom%x, 0.d0, geom%width, geom%n+1 )
-
-    ! split slab, set zone between xleft and xright to be pure capture
-    if ( split_1D ) then
-      do i=1,geom%n
-        if ( geom%x(i) >= Split_xleft_1D .and. geom%x(i+1) <= Split_xright_1D ) then
-          geom%pScatter(i) = 0.d0
-          geom%nuSigmaF(i) = 0.d0
-        endif
-      enddo
-    endif
   type is ( block_type )
     geom%nx   = NMesh_X_2D 
     geom%ny   = NMesh_Y_2D
@@ -149,11 +139,34 @@ subroutine initialize_geom( geom )
     call linspace( geom%w, pi/(geom%nw+1), pi, geom%nw + 1 )
   end select
 
+  ! set cross sections
   call vector( geom%SigmaT, base_SigmaT, geom%mesh_size() )
   call vector( geom%pScatter, base_pScatter, geom%mesh_size() )
   call vector( geom%SigmaF, base_SigmaF, geom%mesh_size() )
   call vector( geom%nubar, base_nubar, geom%mesh_size() )
   call vector( geom%nuSigmaF, base_nubar*base_SigmaF, geom%mesh_size() )
+
+  ! special modifications to cross sections
+  select type ( geom )
+  type is ( slab_type )
+    ! split slab, set zone between xleft and xright to be pure capture
+    if ( split_1D ) then
+      do i=1,geom%n
+        if ( geom%x(i) >= Split_xleft_1D .and. geom%x(i+1) <= Split_xright_1D ) then
+          geom%pScatter(i) = 0.d0
+          geom%nuSigmaF(i) = 0.d0
+        endif
+      enddo
+    endif
+  type is ( block_type ) 
+    if ( nonuniform_2D ) then
+      do i=1,geom%ny/2
+        geom%SigmaT( 1 + (i-1)*geom%nx : geom%nx/2 + (i-1)*geom%nx ) = 2.d0
+        geom%SigmaF( 1 + (i-1)*geom%nx : geom%nx/2 + (i-1)*geom%nx ) = 2.d0*(1.d0 - base_pScatter)
+      enddo
+      geom%nuSigmaF = geom%nubar * geom%SigmaF
+    endif
+  end select
 
 end subroutine initialize_geom
 

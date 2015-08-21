@@ -28,5 +28,6 @@ module Input
   integer, parameter :: NAngles_2D     = 256
   integer, parameter :: Reflect_2D     = 0
   real(8), parameter :: RaySpacing_2D  = 0.01d0
+  logical, parameter :: nonuniform_2D  = .false.
 
 end module Input
