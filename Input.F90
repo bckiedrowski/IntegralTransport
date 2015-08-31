@@ -29,5 +29,6 @@ module Input
   integer, parameter :: Reflect_2D     = 0
   real(8), parameter :: RaySpacing_2D  = 0.01d0
   logical, parameter :: nonuniform_2D  = .false.
+  logical, parameter :: coarsen_2D     = .true.
 
 end module Input

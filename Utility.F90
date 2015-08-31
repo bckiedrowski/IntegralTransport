@@ -7,7 +7,7 @@ module Utility
     module procedure copy_vector, copy_matrix
   end interface
   interface vector
-    module procedure new_vector, uniform_vector
+    module procedure new_vector, new_vector_int, uniform_vector
   end interface
   interface matrix
     module procedure new_matrix
@@ -26,6 +26,18 @@ subroutine new_vector( x, N )
   allocate( x(1:max(1,N)) )
 
 end subroutine new_vector
+
+!-------------------------------------------------------------------------------
+subroutine new_vector_int( x, N )  
+  implicit none
+
+  integer, allocatable, intent(out) :: x(:)
+  integer, intent(in)  :: N
+
+  if ( allocated(x) )  deallocate( x )
+  allocate( x(1:max(1,N)) )
+
+end subroutine new_vector_int
 
 !-------------------------------------------------------------------------------
 subroutine uniform_vector( x, a, N )
