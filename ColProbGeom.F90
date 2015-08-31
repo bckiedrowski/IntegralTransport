@@ -70,6 +70,7 @@ module ColProbGeom
     integer              :: fold
     real(8)              :: xmax, ymax, dx, dy, dh
     real(8), allocatable :: x(:), y(:), w(:)
+    logical              :: coarsen
     CONTAINS
       procedure :: assign_geom           => assign_block
       procedure :: collision_probability => collision_probability_block !collision_probability_slab
@@ -126,13 +127,14 @@ subroutine initialize_geom( geom )
 
     call linspace( geom%x, 0.d0, geom%width, geom%n+1 )
   type is ( block_type )
-    geom%nx   = NMesh_X_2D 
-    geom%ny   = NMesh_Y_2D
-    geom%xmax = SlabWidth_X_2D
-    geom%ymax = SlabWidth_Y_2D
-    geom%nw   = NAngles_2D
-    geom%dh   = RaySpacing_2D
-    geom%fold = merge( Reflect_2D, 0, Reflect_2D == 1 .or. Reflect_2D == 2 )
+    geom%nx      = NMesh_X_2D 
+    geom%ny      = NMesh_Y_2D
+    geom%xmax    = SlabWidth_X_2D
+    geom%ymax    = SlabWidth_Y_2D
+    geom%nw      = NAngles_2D
+    geom%dh      = RaySpacing_2D
+    geom%fold    = merge( Reflect_2D, 0, Reflect_2D == 1 .or. Reflect_2D == 2 )
+    geom%coarsen = coarsen_2D
 
     call linspace( geom%x, 0.d0, geom%xmax, geom%nx+1 )
     call linspace( geom%y, 0.d0, geom%ymax, geom%ny+1 )
@@ -360,14 +362,60 @@ end subroutine coarsen_slab
 
 !------------------------------------------------------------------------------
 subroutine coarsen_block( geom, G, success )
-  use Utility, only : copy, matrix, linspace
+  use Utility, only : copy, matrix, vector, linspace
   implicit none
 
   class(block_type),    intent(inout) :: geom
   real(8), allocatable, intent(inout) :: G(:,:)
   logical,              intent(out)   :: success
 
-  success = .false.  ! not implemented yet
+  integer :: i, j, k, l, m, n, p, mi, mj, q
+
+  real(8), allocatable :: tmp(:,:) !, ti(:), tj(:)
+  integer, allocatable :: ti(:), tj(:)
+
+  m = geom%nx
+  n = geom%ny
+  if ( geom%coarsen .and. mod(m,2) == 0 .and. mod(n,2) == 0 ) then
+    p = m*n/4
+    call matrix( tmp, p, p ) ; tmp = 0.d0
+    call vector( ti, 4 ) ; ti = 0.d0
+    call vector( tj, 4 ) ; tj = 0.d0
+
+    do i=1,p
+      mi = 1 + (i-1)/(m/2) !ceiling( i / ( m/2 ) )
+      do j=1,p
+        mj = 1 + (j-1)/(m/2) !ceiling( j / ( m/2 ) )
+        ! construct index vectors ti and tj
+        do k=1,2
+          do l=1,2
+            q = l + 2*(k-1)
+            ti(q) = l + 2*(i-1) + m*( mi + k - 2 )
+            tj(q) = l + 2*(j-1) + m*( mj + k - 2 )
+          enddo
+        enddo
+
+        ! loop over index vectors and compute corasened matrix element i,j
+        do k=1,4
+          do l=1,4
+            tmp(i,j) = tmp(i,j) + G( ti(k), tj(l) )
+          enddo
+        enddo
+      enddo
+    enddo
+
+    call copy( G, tmp )
+    deallocate( tmp )
+
+    geom%nx = geom%nx / 2
+    geom%ny = geom%ny / 2
+    call linspace( geom%x, 0.d0, geom%xmax, geom%nx+1 )
+    call linspace( geom%y, 0.d0, geom%ymax, geom%ny+1 )
+
+    success = .true.  
+  else
+    success = .false.  ! not implemented yet
+  endif
 
 end subroutine coarsen_block
 
