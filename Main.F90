@@ -23,7 +23,7 @@ program MutualInfoIntegralTransport
   ! find first two eigenvalues and eigenvectors of fission matrix
   call Eig%eig( F, 2 )
   DomRatio = Eig%val(2) / Eig%val(1)
-  
+  write(*,'(" finished Eigenvalue routine ")')  
   ! scale fission matrix by 1/k and find pmf vector
   F = F / Eig%val(1)
   call copy( r, Eig%vec(1)%v / sum( Eig%vec(1)%v ) )

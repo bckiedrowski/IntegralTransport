@@ -66,8 +66,8 @@ module ColProbGeom
   end type slab_type
 
   type, extends(geom_type) :: block_type
-    integer              :: nx, ny, nw
-    integer              :: fold
+    integer              :: nx, ny, nw, n
+    integer              :: fold_x, fold_y
     real(8)              :: xmax, ymax, dx, dy, dh
     real(8), allocatable :: x(:), y(:), w(:)
     logical              :: coarsen
@@ -127,13 +127,15 @@ subroutine initialize_geom( geom )
 
     call linspace( geom%x, 0.d0, geom%width, geom%n+1 )
   type is ( block_type )
+    geom%n       = NMesh_X_2D*NMesh_Y_2D
     geom%nx      = NMesh_X_2D 
     geom%ny      = NMesh_Y_2D
     geom%xmax    = SlabWidth_X_2D
     geom%ymax    = SlabWidth_Y_2D
     geom%nw      = NAngles_2D
     geom%dh      = RaySpacing_2D
-    geom%fold    = merge( Reflect_2D, 0, Reflect_2D == 1 .or. Reflect_2D == 2 )
+    geom%fold_x  = merge( Reflect_X_2D, 0, Reflect_X_2D == 1 )
+    geom%fold_y  = merge( Reflect_Y_2D, 0, Reflect_Y_2D == 1 )
     geom%coarsen = coarsen_2D
 
     call linspace( geom%x, 0.d0, geom%xmax, geom%nx+1 )
@@ -208,13 +210,15 @@ subroutine assign_block( gnew, geom )
 
   select type(geom) 
   type is (block_type) 
-    gnew%nx   = geom%nx   
-    gnew%ny   = geom%ny   
-    gnew%xmax = geom%xmax 
-    gnew%ymax = geom%ymax 
-    gnew%nw   = geom%nw   
-    gnew%dh   = geom%dh   
-    gnew%fold = geom%fold 
+    gnew%n      = geom%n
+    gnew%nx     = geom%nx   
+    gnew%ny     = geom%ny   
+    gnew%xmax   = geom%xmax 
+    gnew%ymax   = geom%ymax 
+    gnew%nw     = geom%nw   
+    gnew%dh     = geom%dh   
+    gnew%fold_x = geom%fold_x
+    gnew%fold_y = geom%fold_y 
 
     call copy( gnew%x,  geom%x) 
     call copy( gnew%y,  geom%y) 
@@ -246,7 +250,7 @@ integer function mesh_size_block( geom )  result(n)
 
   class(block_type), intent(in) :: geom
 
-  n = geom%nx * geom%ny
+  n = geom%n
 
 end function mesh_size_block
 
@@ -318,10 +322,60 @@ end subroutine reflect_slab
 
 !------------------------------------------------------------------------------
 subroutine reflect_block( geom, G )
+  use Utility, only : copy, matrix, linspace
   implicit none
 
   class(block_type),     intent(inout)   :: geom
   real(8), allocatable, intent(inout) :: G(:,:)
+  
+  real(8), allocatable :: F1(:,:)
+  real(8), allocatable :: F2(:,:)
+  integer :: k1, k2, l1, l2, ifl1, jfl1, jfl2, i1, i2, j1, j2, N1, N2
+  if ( geom%fold_x == 1 ) then
+    write(*,'(" reflected at X midplane ")')
+    l1 = geom%nx / 2
+    k1 = geom%ny
+    N1 = l1*k1
+    geom%nx = l1
+    geom%n  = N1
+    call linspace( geom%x, 0.d0, 0.5d0*geom%xmax, geom%nx+1)
+    call copy( F1, G )
+    call matrix( G, N1, N1 )
+    do i1=1,N1,1
+      do j1=1,N1,1
+        ifl1 = (i1-1)/l1
+        jfl1 = (j1-1)/l1
+        G(i1,j1) = F1(i1+ifl1*l1,j1+l1*jfl1) + F1(i1+ifl1*l1,2*l1+1-j1+3*l1*jfl1)
+      enddo
+    enddo
+    deallocate( F1 )
+    
+  endif
+
+  if ( geom%fold_y == 1 ) then
+    write(*,'(" reflected at Y midplane ")')
+    l2 = geom%nx
+    k2 = geom%ny / 2
+    N2 = l2*k2
+
+    geom%ny = k2
+
+    geom%n  = N2
+    call linspace( geom%y, 0.d0, 0.5d0*geom%ymax,geom%ny+1)
+    call copy( F2, G )
+
+    call matrix( G, N2, N2 )
+    do i2=1,N2,1
+      do j2=1,N2,1
+        jfl2 = (j2-1)/l2
+        G(i2,j2) = F2(i2,j2) + F2(i2,j2+2*N2-l2-2*l2*jfl2)
+      enddo
+    enddo
+    deallocate( F2 )
+
+  endif
+  
+  write(*,'(" end reflection routine ")')
 
 end subroutine reflect_block
 

@@ -1,9 +1,9 @@
 all:
-	gfortran -O3 -c Utility.F90
-	gfortran -O3 -c ExpIntegral.F90
-	gfortran -O3 -c Bickley.F90
-	gfortran -O3 -c MatrixInverse.F90
-	gfortran -O3 -c Eigen.F90
-	gfortran -O3 -c Input.F90
-	gfortran -O3 -c ColProbGeom.F90
-	gfortran -O3  Main.F90 Utility.o MatrixInverse.o Eigen.o ColProbGeom.o ExpIntegral.o Bickley.o Input.o
+	ifort -g -check all -c Utility.F90
+	ifort -g -check all -c ExpIntegral.F90
+	ifort -g -check all -c Bickley.F90
+	ifort -g -check all -c MatrixInverse.F90
+	ifort -g -check all -c Eigen.F90
+	ifort -g -check all -c Input.F90
+	ifort -g -check all -c ColProbGeom.F90
+	ifort -g -check all  Main.F90 Utility.o MatrixInverse.o Eigen.o ColProbGeom.o ExpIntegral.o Bickley.o Input.o
