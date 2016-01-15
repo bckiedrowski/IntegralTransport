@@ -23,8 +23,8 @@ module Input
   ! >>>>> 2d data
   real(8), parameter :: SlabWidth_X_2D = 5.d0
   real(8), parameter :: SlabWidth_Y_2D = 5.d0
-  integer, parameter :: NMesh_X_2D     = 6
-  integer, parameter :: NMesh_Y_2D     = 4
+  integer, parameter :: NMesh_X_2D     = 10
+  integer, parameter :: NMesh_Y_2D     = 10
   integer, parameter :: NAngles_2D     = 128
   integer, parameter :: Reflect_X_2D   = 1
   integer, parameter :: Reflect_Y_2D   = 1

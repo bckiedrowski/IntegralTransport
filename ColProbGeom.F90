@@ -18,7 +18,7 @@ module ColProbGeom
       procedure(colprob),     deferred        :: collision_probability
       procedure(reflgeom),    deferred        :: reflect
       procedure(coarsengeom), deferred        :: coarsen_mesh
-      procedure (assigngeom), deferred        :: assign_geom
+      procedure(assigngeom),  deferred        :: assign_geom
       generic :: assignment(=) => assign_geom
   end type geom_type
 
@@ -468,7 +468,7 @@ subroutine coarsen_block( geom, G, success )
 
     success = .true.  
   else
-    success = .false.  ! not implemented yet
+    success = .false.  
   endif
 
 end subroutine coarsen_block

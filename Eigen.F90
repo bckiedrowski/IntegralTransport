@@ -43,7 +43,6 @@ subroutine PowerIteration( E, A )
 
     Av = Av / maxval( Av )
     err   = sum( abs( v - Av ) )
-   ! write(*,'(" error is   = ",2es14.4)') err, e%val(1)
   enddo
   E%vec(1)%v = Av
 
